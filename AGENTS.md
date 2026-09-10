@@ -33,11 +33,13 @@
 - Agents 消息区必须显式启用原生文本选择与复制；有选区时只延后当前论文/Agent/本地会话的消息 DOM 重绘，状态与停止/授权控件继续更新。选区取消后立即显示最新状态；切换论文、Agent、会话或重新加载不得被旧选区阻塞，窗口/视图销毁时移除监听器。
 - Agents 侧栏模型/思考控件使用单列布局，选中全名可换行；保留原生 select 的菜单和键盘语义，展示副本设为 `aria-hidden`，配置失败同步恢复原值，忙碌状态同时禁用原生控件和更新展示样式。不得以裁切、省略号或仅悬停提示代替完整名称。
 - Agents Item Pane 只能用 `tabID → Zotero.Reader.getByTabID()` 精确解析 Reader PDF 附件；失败时禁用，不得猜测父条目附件。独立 Reader 窗口不注册聊天。
+- 首轮消息复制当前 PDF 前，必须对 `item.getFilePathAsync()` 返回值执行跨平台绝对路径校验并确认文件存在；Windows 盘符/UNC 与 Unix 路径均须支持，不得用仅接受 `/` 的判断把现存 Windows 附件误报为缺失。
+- `pdftotext` 能力探测必须按平台构造候选：Windows 只从分号 PATH 查找 `pdftotext.exe`，macOS/Unix 保留固定常见位置并读取冒号 PATH；无效、不可读或不存在的候选必须隔离为“不可用”并回退 Zotero PDFWorker，不得让 `IOUtils.exists()` 的路径解析异常阻断首轮发送。
 - PDF 选区加入 Codex 必须再次用 `tabID → Zotero.Reader.getByTabID() → itemID` 精确复核附件，只复制白名单文本与有限数值 PDF 坐标；未发送草稿仅驻留内存并按附件隔离，精确坐标只在用户发送时交给本机 Codex。侧栏自动展开只能操作同一 tab 的 `item-details`，能力缺失时保留草稿并失败关闭。
 - PDF 截图只能通过同一 `tabID → Zotero.Reader.getByTabID() → itemID` 映射加入对应 Codex 草稿。Zotero 9.0.6 的私有 PDF.js 原页渲染桥必须隔离在 `pdf-screenshot.js`、精确版本检查并失败关闭；不得退回屏幕抓图或携带界面/批注。桥接代码不得把特权回调直接传入 PDF.js 内容域数组方法，PDFPageProxy 只能受控解包，`getViewport()`/`render()` 参数必须在目标 iframe 域内创建。跨页框选按页面拆图，图片和可复现 PDF 位置在用户发送时分别作为 ACP 图片块与受边界保护的 JSON 交给 Codex。截图副本只能保存在 ACP 工作区外的 `screenshots/论文标识/本地会话标识`；未发送草稿需可恢复，移除即清理，已发送副本随会话保留，重建会话统一删除。单图和单轮资源上限不得绕过，模型不支持图片时必须原子保留草稿并阻止发送。
 - Codex 消息中的文件引用只能在当前 PDF 的专用工作区内定位；不得让模型输出的路径越过工作区边界。首轮安全前缀和资源链接不得作为用户问题显示。
 - Codex 文本与 Web Search 卡片中的外部链接只能接受 HTTP/HTTPS，必须在用户点击后通过 `Zotero.launchURL()` 交给系统默认浏览器；不得在 Item Pane 内导航、自动打开链接或加载远程图片。Codex 文件引用需兼容单冒号 `:codex-file-citation{...}` 与双冒号格式，并继续执行工作区边界检查。
-- 完成态 View Image 只能在状态、read 语义、标题、输入路径、位置和资源链接相互印证后处理；源文件必须是 25 MiB 以内且扩展名与签名一致的 PNG/JPEG/GIF/WebP/AVIF 常规文件，拒绝 SVG。副本只能写入 ACP 工作区外的 `tool-images/论文标识/本地会话标识`，不得作为 cwd、资源、附加目录或软链接交给 Codex；界面不得回退渲染源路径。卡片默认折叠并在展开后才解码，放大层必须支持关闭按钮、背景点击、Escape 以及适应窗口/1:1 切换。重建会话必须删除旧会话图片目录。
+- 完成态 View Image 只能在状态、read 语义、标题、输入路径、位置和资源链接相互印证后处理；Windows 盘符路径、正斜杠等价形式与 `file:///C:/...` 必须只在比较键中统一，传给文件系统的源路径必须保留可用的原生绝对路径，不得把 `C:\...` 当相对路径再次拼接到工作区。源文件必须是 25 MiB 以内且扩展名与签名一致的 PNG/JPEG/GIF/WebP/AVIF 常规文件，拒绝 SVG。副本只能写入 ACP 工作区外的 `tool-images/论文标识/本地会话标识`，不得作为 cwd、资源、附加目录或软链接交给 Codex；界面不得回退渲染源路径。卡片默认折叠并在展开后才解码，放大层必须支持关闭按钮、背景点击、Escape 以及适应窗口/1:1 切换。重建会话必须删除旧会话图片目录。
 - Codex 公式固定使用 XPI 内置 KaTeX `0.18.4` 生成 MathML；必须保持 `trust: false`、宏展开/尺寸上限、每公式独立宏环境和 MathML 外部元素/资源属性过滤。不得使用 `innerHTML`、远程公式服务、运行时 CDN、KaTeX HTML 输出或可加载资源的可信命令。
 - Codex Mermaid 固定使用 XPI 内置 Mermaid `11.16.1`，只在出现 `mermaid` fenced code block 时按窗口延迟加载，不得使用 CDN 或运行时下载。由于 Zotero Item Pane 属于无 `body` 的 XUL 文档，运行时必须留在同窗口的本地 `about:blank` HTML iframe 与专用 Gecko sandbox 中；sandbox 必须以该 HTML 窗口为原型继承只读的 `window`/`document`，不得再次赋值，关闭插件时移除 iframe 并丢弃 sandbox 引用；不得在 Zotero 9.0.6 调用 `Cu.nukeSandbox()`。必须保持 `securityLevel: strict`、`htmlLabels: false`、安全配置锁定、源文本/边数/超时/SVG 大小与节点数上限。返回 SVG 只允许 Mermaid flowchart 生成的本地 `feDropShadow` 滤镜，不得放行其他滤镜原语，并继续拒绝活动元素、HTML、链接和非本地资源引用；结果需写入最长边不超过 4096 像素的固有尺寸并序列化为隔离的数据图片，宽图在侧栏横向滚动，不得作为活动 SVG 注入 Item Pane。解析、超限或安全校验失败时必须保留原始源码。
 - Codex 开发者模式必须默认关闭；关闭时不得采集或保留额外的可复制诊断日志，也不得显示复制入口。开启后仅允许在内存中有界记录当前实时 turn 的工具与思考诊断事件，脱敏常见密钥和用户主目录，不得自动落盘或上传；关闭模式、重建会话和插件退出必须清空。
@@ -76,7 +78,7 @@ zotero-translate/
 │       ├── service.js                # 翻译、摘要、智能标签、缓存探测/强制刷新、术语删除及在途失效
 │       ├── pi-acp-compat.js          # 固定 Pi 适配器哈希校验、Node 内存补丁、按模型读取档位与确认 max
 │       ├── acp-client.js             # 跨平台路径发现/校验、双适配器准备/离线启动、Pi 补丁入口、版本检查、stdio 与进程清理
-│       ├── codex-chat.js             # 共用聊天核心、每 PDF/Agent session、按模型配置目录、权限确认与媒体边界
+│       ├── codex-chat.js             # 共用聊天核心、跨平台 PDF/媒体路径、每 PDF/Agent session、按模型配置目录、权限确认与媒体边界
 │       ├── agents-chat.js            # 当前 Agent 偏好、服务路由、Pi 每论文连接/引用与独立探测生命周期
 │       ├── math-renderer.js          # KaTeX→MathML、有界不可信输入与安全导入/原始 TeX 回退
 │       ├── mermaid-renderer.js       # Mermaid XUL/HTML sandbox、串行缓存、有界 SVG 校验与数据图片
@@ -112,7 +114,7 @@ zotero-translate/
 │   ├── pi-acp-compat.test.js          # max/能力/确认失败/哈希拒绝；可选现成适配器无提示词验证
 │   ├── acp-client.test.js            # Windows/Unix PATH、NVM/软链接发现、JSONL、双适配器准备/版本与进程清理
 │   ├── agents-chat.test.js           # Agent 切换/偏好、忙碌锁、Pi 每论文连接隔离与探测生命周期
-│   ├── codex-chat.test.js            # Codex 权限切换/失败、Pi 模型/思考/回放及 PDF/媒体/日志边界
+│   ├── codex-chat.test.js            # 跨平台 PDF/媒体、Codex 权限切换/失败、Pi 模型/思考/回放及日志边界
 │   ├── codex-chat-ui.test.js         # Agent 快速切换/迟到回调、隔离草稿、选择期间流式更新与安全渲染、工具图、Web Search/外链/引用边界
 │   ├── math-renderer.test.js         # 公式回归样本、KaTeX 安全选项、MathML 导入过滤与回退
 │   ├── mermaid-renderer.test.js      # Mermaid 上限、固定安全配置、SVG 过滤、延迟加载/串行/缓存与回退
