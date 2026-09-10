@@ -31,6 +31,7 @@
 - Pi 每篇论文懒创建独立 ACP 连接，避免单连接 session 替换影响其他论文；无 Reader 引用的空闲连接回收，重新发送用持久 session 恢复。探测连接独立；退出清理所有连接及子进程。
 - 原 Codex 数据在 `codex-acp/` 原路径兼容升级，旧记录缺失 agentId 时视为 Codex，保留 session ID、工作区与图片引用；Pi 使用 `pi-acp/` 独立目录。重建只影响当前 Agent；文字/选区草稿仅内存，截图草稿沿用本机恢复与删除规则。
 - Agents 消息区必须显式启用原生文本选择与复制；有选区时只延后当前论文/Agent/本地会话的消息 DOM 重绘，状态与停止/授权控件继续更新。选区取消后立即显示最新状态；切换论文、Agent、会话或重新加载不得被旧选区阻塞，窗口/视图销毁时移除监听器。
+- Agents 流式文本/思考更新必须有界合并，不能为每个小 chunk 重复深拷贝整份记录和重建全部 DOM；当前合并窗口为 50 ms，镜像写盘防抖为 500 ms。Codex 与 Pi 的单工具原始输出统一限制为 64 KiB，旧镜像加载时原地规范化后原子保存；折叠工具卡片只构建摘要，展开后才创建大输出或图片 DOM。优化后的公开快照仍须与内部状态隔离，最终文本、授权、停止、图片与错误更新不得丢失。
 - Agents 侧栏模型/思考控件使用单列布局，选中全名可换行；保留原生 select 的菜单和键盘语义，展示副本设为 `aria-hidden`，配置失败同步恢复原值，忙碌状态同时禁用原生控件和更新展示样式。不得以裁切、省略号或仅悬停提示代替完整名称。
 - Agents Item Pane 只能用 `tabID → Zotero.Reader.getByTabID()` 精确解析 Reader PDF 附件；失败时禁用，不得猜测父条目附件。独立 Reader 窗口不注册聊天。
 - 首轮消息复制当前 PDF 前，必须对 `item.getFilePathAsync()` 返回值执行跨平台绝对路径校验并确认文件存在；Windows 盘符/UNC 与 Unix 路径均须支持，不得用仅接受 `/` 的判断把现存 Windows 附件误报为缺失。
@@ -78,11 +79,11 @@ zotero-translate/
 │       ├── service.js                # 翻译、摘要、智能标签、缓存探测/强制刷新、术语删除及在途失效
 │       ├── pi-acp-compat.js          # 固定 Pi 适配器哈希校验、Node 内存补丁、按模型读取档位与确认 max
 │       ├── acp-client.js             # 跨平台路径发现/校验、双适配器准备/离线启动、Pi 补丁入口、版本检查、stdio 与进程清理
-│       ├── codex-chat.js             # 共用聊天核心、跨平台 PDF/媒体路径、每 PDF/Agent session、按模型配置目录、权限确认与媒体边界
+│       ├── codex-chat.js             # 共用聊天核心、跨平台 PDF/媒体路径、流式批处理/工具输出限幅、每 PDF/Agent session、配置与权限
 │       ├── agents-chat.js            # 当前 Agent 偏好、服务路由、Pi 每论文连接/引用与独立探测生命周期
 │       ├── math-renderer.js          # KaTeX→MathML、有界不可信输入与安全导入/原始 TeX 回退
 │       ├── mermaid-renderer.js       # Mermaid XUL/HTML sandbox、串行缓存、有界 SVG 校验与数据图片
-│       ├── codex-chat-ui.js          # Agents Item Pane、完整换行的模型/思考选项、Agent/权限切换、文本选择保持及安全渲染
+│       ├── codex-chat-ui.js          # Agents Item Pane、流式/折叠工具延迟渲染、完整模型选项、Agent/权限切换、文本选择保持及安全渲染
 │       ├── codex-chat.css            # Agents 侧栏单列配置/完整选中值、Mermaid/媒体/模态、消息选择与权限样式
 │       ├── codex.svg                 # 旧 Codex 单色图标（保留历史资源）
 │       ├── agents.svg                # Agents Item Pane/Sidenav 中性对话图标
@@ -114,8 +115,8 @@ zotero-translate/
 │   ├── pi-acp-compat.test.js          # max/能力/确认失败/哈希拒绝；可选现成适配器无提示词验证
 │   ├── acp-client.test.js            # Windows/Unix PATH、NVM/软链接发现、JSONL、双适配器准备/版本与进程清理
 │   ├── agents-chat.test.js           # Agent 切换/偏好、忙碌锁、Pi 每论文连接隔离与探测生命周期
-│   ├── codex-chat.test.js            # 跨平台 PDF/媒体、Codex 权限切换/失败、Pi 模型/思考/回放及日志边界
-│   ├── codex-chat-ui.test.js         # Agent 快速切换/迟到回调、隔离草稿、选择期间流式更新与安全渲染、工具图、Web Search/外链/引用边界
+│   ├── codex-chat.test.js            # 跨平台 PDF/媒体、Codex/Pi 64 KiB 输出、流式合并、配置、回放及日志边界
+│   ├── codex-chat-ui.test.js         # 流式/折叠工具延迟渲染、Agent 切换、隔离草稿、选择保持、工具图与外链/引用边界
 │   ├── math-renderer.test.js         # 公式回归样本、KaTeX 安全选项、MathML 导入过滤与回退
 │   ├── mermaid-renderer.test.js      # Mermaid 上限、固定安全配置、SVG 过滤、延迟加载/串行/缓存与回退
 │   ├── main.test.js                  # ACP/Agent 设置桥接、只读发现、FilePicker 选取/取消与偏好作用域
