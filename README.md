@@ -49,7 +49,7 @@ An interactive chart from the conversation, shown beside the passage it explains
 
 ## Get started
 
-The current version is **0.1.41**, targeting **macOS with Zotero 10.0.4** and retaining Zotero 9 support. The plugin declares compatibility with Zotero 9.0–10.0.x. The Agents sidebar works in PDF tabs in Zotero's main window; standalone reader windows are not supported.
+The current version is **0.1.42**, targeting **macOS with Zotero 10.0.4** and retaining Zotero 9 support. The plugin declares compatibility with Zotero 9.0–10.0.x. The Agents sidebar works in PDF tabs in Zotero's main window; standalone reader windows are not supported.
 
 PDF screenshots are enabled on the individually verified **9.0.6 and 10.0.4** versions. Use the original PDF view for screenshots; Zotero 10's reflowed Reading Mode is not supported for capture. Other patch versions keep screenshots disabled until their private PDF.js bridge has been checked.
 
@@ -84,6 +84,10 @@ Preparation downloads the pinned adapter and checks the connection and model opt
 ![Shared Node and npx paths, with the Pi tab showing its model, thinking level, and prepared adapter](docs/screenshots/agent-settings.png)
 
 Codex and Pi share the Node / npx runtime and keep their own model settings. The screenshot above shows the existing Pi panel.
+
+On Windows, select Pi's `node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js` (or a native `pi.exe`), not the npm `.cmd` or `.ps1` shim. The selected Node runs that JavaScript entry for inspection and RPC sessions. OpenCode requires the package's `node_modules/opencode-ai/bin/opencode.exe` or another local `.exe`; detection runs it directly without a shell. Both package paths are included in read-only candidate discovery when present.
+
+If OpenCode returns no adjustable effort levels for the selected model, the settings and sidebar say that new sessions follow OpenCode's default. No levels are inferred from the model name.
 
 For **OpenCode 1.18.30 or a newer stable 1.x version**, open the **OpenCode** tab, select the local executable (including installations in `~/.opencode/bin`), and click **Detect OpenCode** (检测 OpenCode). If the path is empty, detection selects the first local candidate; existing or manually entered paths are kept. You can then choose default model and thinking options. Detection uses an independent empty session and temporary database, sends no prompt, and removes temporary data when done. It does not download dependencies. If something is missing, first run `opencode` in your terminal to complete login and dependency setup, then inspect again.
 
@@ -124,7 +128,7 @@ Read [AGENTS.md](AGENTS.md) before changing plugin code. Runtime files live in `
 npm run check
 sh scripts/build.sh
 shasum -a 256 -c dist/SHA256SUMS
-unzip -t dist/smart-paper-translator-0.1.41.xpi
+unzip -t dist/smart-paper-translator-0.1.42.xpi
 ```
 
 Build output goes to `dist/`. Runtime changes also require non-installing XPI parsing in the target Zotero version. The [technical reference (Chinese)](docs/technical-reference.zh-CN.md) covers adapter behavior, storage, rendering limits, and historical validation results.

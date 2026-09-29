@@ -80,6 +80,7 @@ smart-paper-translator-agents-path-option =
         [nvm] NVM { $version } · { $path }
         [path] PATH · { $path }
         [node] Selected Node · { $path }
+        [npm] npm package · { $path }
        *[standard] Standard location · { $path }
     }
 
@@ -92,3 +93,4 @@ smart-paper-translator-agents-opencode-inspect = Detect OpenCode
 smart-paper-translator-agents-opencode-offline = Native startup uses local OpenCode with automatic updates and dependency downloads disabled. Detection uses a temporary database and an empty session, then cleans them up without generating replies or modifying existing OpenCode sessions.
 smart-paper-translator-agents-opencode-access = OpenCode follows its local tool permissions and asks here when approval is required. Session mode applies only to this paper’s OpenCode session.
 smart-paper-translator-agents-opencode-needs-setup = Select your local executable and detect OpenCode in the plugin settings.
+smart-paper-translator-agents-opencode-no-effort = This model has no adjustable effort levels; new sessions use the OpenCode default.

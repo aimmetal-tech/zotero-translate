@@ -14,25 +14,28 @@
 
 - 插件名称：Smart Paper Translator
 - 插件 ID：`smart-paper-translator@zotero.local`
-- 当前版本：`0.1.41`
-- 目标平台：macOS Zotero 10.0.4；保留 Zotero 9.0.6 既有支持
+- 当前版本：`0.1.42`
+- 目标平台：macOS Zotero 10.0.4；保留 Zotero 9.0.6 既有支持；本次在 Windows Zotero 10.0.3 验证 0.1.42 安装及 OpenCode 侧栏提示
 - 清单兼容范围：Zotero `9.0`–`10.0.*`；私有 PDF.js 截图桥仅开放 `9.0.6` / `10.0.4`
 - 插件源码根目录：`plugin/`
 - 最终 XPI 中只能包含 `plugin/` 下的运行时文件，不得包含 `.agents/`、测试、文档或构建工具。
 - 未经用户明确授权，不得安装插件、修改 Zotero profile、运行真实 npx 下载，或使用真实 API Key/Codex 发起模型请求。
 - 内置 Agent 只允许 `codex` / `pi` / `opencode`；Codex/Pi 适配器分别固定为 `@agentclientprotocol/codex-acp@1.6.2` / `pi-acp@0.0.33`。只有设置页“准备并检测”可联网准备，聊天启动必须使用离线 npm 模式，不得静默下载或升级。
 - OpenCode 直接使用已选本机绝对路径运行 `opencode acp`，无需 Node/npx；以 1.18.30 为验证基线，只允许不低于它的稳定版 1.x，并验证 ACP 1、agentInfo 版本与 loadSession/session.close 能力。公共 Node 若已选择，目录仍排在子进程 PATH 首位，但不得成为 OpenCode 检测或启动的必填条件。禁用自动升级与模型目录后台刷新，npm 保持 offline；依赖缺失时提供终端准备说明，不静默下载。
+- OpenCode 的 `requiredVersion` 是最低版本，`preparedVersion` 是检测到的实际稳定版 1.x；侧栏只在准备状态缺失时显示“请检测”提示，不得拿两个版本做完全相等比较。Codex/Pi 的固定适配器仍必须完全匹配要求版本。
 - OpenCode 自带 HTTP 服务必须显式绑定 `127.0.0.1`、随机端口、关闭 mDNS；随机认证凭据仅存在于当前进程环境，不写入参数、偏好、目录缓存或日志。检测使用独立连接、临时数据库和空 session，不发提示词；结束时关闭 session、进程并清理插件自己的临时数据，不删除用户会话。清理与重新启动必须串行，不能让旧清理删除新工作区。
 - OpenCode `model` 保留完整模型 ID，`effort` 映射思考强度，动态 `mode` 显示为“运行模式”并保存到当前论文的 `session.config.agentMode`，与 Codex 权限 `mode` 分开。新会话默认跟随本机模式；选项完全来自 ACP，变更确认成功后保存，失败恢复原值；恢复先应用模型再校验思考档位。授权沿用本机规则并通过 ACP 交互卡片明确选择。
 - OpenCode 检测有界读取 `models --verbose`，输出最多 16 MiB、模型最多 10000；仅保留模型 ID 与明确的图片/PDF 输入能力，禁止持久化原始输出、provider headers/options 或密钥。路径或本机版本变化必须失效检测缓存，保留历史。模型没有明确图片能力时阻止发送并保留完整截图草稿；没有原生 PDF 能力时提供工作区 source.txt 引用。回放跳过合成上下文及类型化 PDF/图片块，只通过已验证截图 ID 关联本地副本。
-- OpenCode 禁用终端标题和彩色输出；兼容本机扩展仍写入 stdout 的 OSC 0/1/2 标题控制码，流式过滤必须处理分块，单序列最多 4096 字节，拒绝未闭合、其他控制码及普通非 JSON 日志，不得放宽 Codex/Pi JSON 校验。只读 `models --verbose` 使用固定 `/bin/sh` 收集脚本：路径仅经 argv 传递，清除 ENV/BASH_ENV，收到随机结束标记后才关闭 stdin 释放管道，避免 Gecko HUP 提前截断；保持退出码和输出/超时上限，取消时杀死并回收所属子进程。不得执行用户 shell 启动文件、下载依赖或将原始输出写入文件。ACP 会话仍直接启动本机 OpenCode。
+- OpenCode 禁用终端标题和彩色输出；兼容本机扩展仍写入 stdout 的 OSC 0/1/2 标题控制码，流式过滤必须处理分块，单序列最多 4096 字节，拒绝未闭合、其他控制码及普通非 JSON 日志，不得放宽 Codex/Pi JSON 校验。Unix 的只读 `models --verbose` 使用固定 `/bin/sh` 收集脚本：路径仅经 argv 传递，清除 ENV/BASH_ENV，收到随机结束标记后才关闭 stdin 释放管道，避免 Gecko HUP 提前截断；Windows 直接启动已选 `.exe`，先关闭 stdin 传递 EOF，再有界读取至退出，不运行 cmd/PowerShell。两者保持退出码和输出/超时上限，取消时杀死并回收所属子进程。不得执行用户 shell 启动文件、下载依赖或将原始输出写入文件。ACP 会话仍直接启动本机 OpenCode。
 - Codex 动态模型选项检测使用不发送提示词的临时空 session，并以 `session/close` 释放；不得为清理该空 session 调用会归档 thread 的 `session/delete`。Pi 必须用独立连接检测，无提示词，结束后关闭进程；不得套用 Codex 的 `--version`、`authentication/status`、`session/close`。
 - Codex 新会话默认受审批的 `agent`，用户可在当前论文的 Codex 会话中选择 `agent-full-access`。Full Access 明示允许工作区外文件操作与联网；已有会话恢复保存的模式，切换收到成功响应后才持久化，失败必须阻止使用未确认权限。不得把会话权限升级为插件全局授权。
 - ACP 设置共用一个 Node / npx 运行环境，Codex、Pi 与 OpenCode 用 Tab 分开配置自身路径、模型和检测状态；公共路径继续使用旧 `codexNodePath` / `codexNpxCliPath` 偏好键以保留升级配置。选择的 Node 目录必须排在子进程 PATH 首位，Agent 路径探测不得覆盖公共路径；公共版本检测只运行本机 `--version`，不启动 ACP 或下载。检测期间锁住公共及 Agent 配置，Tab 切换只显示本地面板；窗口销毁后丢弃迟到结果。版本不满足、进程失败及无法读取版本必须区分并保留具体诊断。
 - 路径控件必须同时提供本地候选下拉、手动输入及浏览文件，打开设置自动只读枚举当前进程 PATH、默认/自定义 NVM（含 `NVM_DIR` / `XDG_CONFIG_HOME`）、`~/.opencode/bin` 和常见位置；NVM 目录按版本数字排序，每个来源最多 128 个目录，去重并过滤非常规文件。只读解析 npm 的 `npx → npx-cli.js` 软链接，不运行 shell 启动脚本或候选程序。刷新不得覆盖现有/手动路径。OpenCode 的“刷新路径列表”和“检测 OpenCode”仅在路径为空时可填入本次发现的首个候选；异步返回后必须重新检查视图与输入，关闭视图不得保存或启动检测。文件选择必须使用 Zotero `chrome://zotero/content/modules/filePicker.mjs`，传入当前设置窗口；由仍存活的设置视图提交选择结果，取消或关闭后不写偏好。
-- Windows 路径支持范围为公共 Node/npx/Agent 候选发现、Codex/Pi npm 启动参数、当前 PDF 附件与 Codex View Image 的盘符路径；不据此宣称完整 Windows Pi/OpenCode 已验证。路径发现补充 `NVM_HOME` / `NVM_SYMLINK`、ProgramFiles 与 APPDATA，Windows PATH 用分号，Unix 用冒号。进入 Gecko PathUtils/IOUtils/Subprocess 前用 `ACP.toNativeAbsolutePath()` 统一盘符/UNC 分隔符，拒绝盘符相对路径、NUL 和不属于当前平台的根路径，不改写已选偏好。PDF 文件须先确认存在；`pdftotext` 按平台探测，路径构造及文件访问异常均须隔离并回退 PDFWorker。OpenCode 的原生启动与模型目录收集继续沿用 main 的实现。
+- Windows 路径支持范围包括公共 Node/npx/Agent 候选发现、Pi 的 `cli.js` 版本检测和无 shell RPC 启动、OpenCode `.exe` 原生启动和直接模型目录收集、当前 PDF 附件与 Codex View Image 的盘符路径；实际验证范围须单独记录，不将合成测试当作安装后 UI 验证。路径发现补充 `NVM_HOME` / `NVM_SYMLINK`、ProgramFiles、APPDATA 及全局 npm 包内的 Pi/OpenCode 入口，Windows PATH 用分号，Unix 用冒号。进入 Gecko PathUtils/IOUtils/Subprocess 前用 `ACP.toNativeAbsolutePath()` 统一盘符/UNC 分隔符，拒绝盘符相对路径、NUL 和不属于当前平台的根路径，不改写已选偏好。PDF 文件须先确认存在；`pdftotext` 按平台探测，路径构造及文件访问异常均须隔离并回退 PDFWorker。
 - Pi 首版验证目标为本机 Pi `0.85.1`，离线启动要求 Pi >= 0.85.1 / Node >= 22.19.0；使用 `PI_ACP_PI_COMMAND` 选择本机 Pi，设置 `PI_OFFLINE=1`、`PI_TELEMETRY=0`、`PI_SKIP_VERSION_CHECK=1`。用初始化响应校验 pi-acp 版本；`model` / `thought_level` 分别映射模型与思考强度，Pi `mode` 不作为权限。扩展交互请求必须保留。
 - Pi `max` 兼容补丁只在插件启动的 Node 进程中生效：`pi-acp-compat.js` 用 Node `module.registerHooks()` 对固定 `pi-acp@0.0.33` 入口做内存转换，先检查包名、版本及 SHA-256；源码不符必须失败，不得修改 npm 缓存、全局 Pi 或静默下载。`get_available_thinking_levels` 是当前模型档位的唯一来源，设置后必须回读 `get_state` 确认；不支持的档位和无效响应必须拒绝，不得补造 `max` 或回退成 `medium`。独立配置探测按模型读取档位，不发送提示词；兼容修订变更只失效 Pi 的选项目录，保留会话与已准备状态。恢复先应用保存的模型再校验思考档位，配置中的中间通知不得覆盖尚未确认的选择。
+- Windows Pi 选择 npm 包的 `dist/bundle/cli.js` 或原生 `pi.exe`；`.cmd/.bat/.ps1` 必须给出明确错误。`cli.js --version` 由已选 Node 执行，ACP 仍保存原 Pi 路径到 `PI_ACP_PI_COMMAND`；固定适配器的 Windows RPC 进程在校验哈希后用同一个 Node 加载该脚本，参数独立传递且禁用 shell。Windows 适配器入口只从 npm `.bin` 相邻的 `pi-acp/dist/index.js` 定位，仍验证包名、版本和哈希。
+- Windows 的 npm exec 会将含空格的绝对 Node 路径交给 cmd 错误拆词，且长 `--eval` 超出 cmd 命令行上限；Pi 启动参数使用 `node` 命令名，由已选 Node 目录排在 PATH 首位保证同一运行时。固定兼容源码仅在当前子进程环境传递，`--eval` 用短入口读取后立即删除该环境变量，不把源码写入文件或传给 Pi 子进程。不得改用 `.cmd` 包装、系统默认 Node 或下载回退。OpenCode 模型没有 ACP `effort` 选项时，设置页和侧栏必须说明其没有可调档位、默认跟随 OpenCode，不得补造思考强度选项。
 - Agents 每篇论文记住当前 Agent（默认 Codex）；历史、模型、思考、文字/选区/截图草稿均按论文和 Agent 隔离。切换只加载本地历史，连接、生成、授权和停止期间禁用 Agent/权限切换；截图捕获绑定启动时的 Agent。异步视图回调必须复核附件、Agent 与请求序号。
 - Pi 和 OpenCode 每篇论文懒创建独立 ACP 连接，避免单连接 session 替换或 cwd 混用影响其他论文；无 Reader 引用的空闲连接回收，重新发送用持久 session 恢复。探测连接独立；退出清理所有连接及子进程。
 - 原 Codex 数据在 `codex-acp/` 原路径兼容升级，旧记录缺失 agentId 时视为 Codex，保留 session ID、工作区与图片引用；Pi / OpenCode 分别使用 `pi-acp/` / `opencode-acp/` 独立目录。重建只影响当前 Agent；文字/选区草稿仅内存，截图草稿沿用本机恢复与删除规则。
@@ -93,16 +96,16 @@ zotero-translate/
 │       ├── pdf-screenshot.js         # Zotero 9.0.6/10.0.4 精确版本桥、原页框选/跨页拆图、PNG 校验与资源保护
 │       ├── api.js                    # OpenAI Chat Completions 客户端与安全错误映射
 │       ├── service.js                # 翻译、摘要、智能标签、缓存探测/强制刷新、术语删除及在途失效
-│       ├── pi-acp-compat.js          # 固定 Pi 适配器哈希校验、Node 内存补丁、按模型读取档位与确认 max
-│       ├── opencode-acp.js          # 原生启动、OSC 标题过滤、模型输出结束握手、临时数据库与能力解析
-│       ├── acp-client.js             # 跨平台候选/原生路径、npm/原生启动路由、Pi 补丁、版本/能力与进程清理
+│       ├── pi-acp-compat.js          # 固定 Pi 适配器哈希校验、Node 内存补丁、Windows 无 shell RPC、按模型读取档位与确认 max
+│       ├── opencode-acp.js          # 跨平台原生启动、OSC 标题过滤、Unix/Windows 模型收集、临时数据库与能力解析
+│       ├── acp-client.js             # 跨平台候选/原生路径、npm 包入口发现、Pi 脚本版本检测、启动路由与进程清理
 │       ├── codex-chat.js             # 共用聊天核心、原生 PDF/图片路径、流式合并/输出限幅、会话/权限/媒体及图表读取
 │       ├── agents-chat.js            # 当前 Agent 偏好、服务路由、Pi/OpenCode 每论文连接/引用与独立探测生命周期
 │       ├── math-renderer.js          # KaTeX→MathML、有界不可信输入与安全导入/原始 TeX 回退
 │       ├── mermaid-renderer.js       # Mermaid XUL/HTML sandbox、串行缓存、有界 SVG 校验与数据图片
 │       ├── visualize-renderer.js     # visualize 标记、Unix/Windows/UNC 工作区逐级校验、双层无网络 iframe、资源/状态与清理
 │       ├── visualize-theme.css       # 隔离图表的本地明暗主题与基础控件样式
-│       ├── codex-chat-ui.js          # Agents Item Pane、配置/权限、文本选择/滚动保持、工具延迟构建与安全渲染/图表路由
+│       ├── codex-chat-ui.js          # Agents Item Pane、配置/权限及无可调档位提示、文本选择/滚动保持、安全渲染/图表路由
 │       ├── codex-chat.css            # Agents 配置/权限、消息选择、Mermaid/媒体及图表预览和放大层样式
 │       ├── codex.svg                 # 旧 Codex 单色图标（保留历史资源）
 │       ├── agents.svg                # Agents Item Pane/Sidenav 中性对话图标
@@ -125,7 +128,7 @@ zotero-translate/
 │       ├── reader.css                # Reader 工具栏/截图、Agents 选区、悬浮面板/悬停删除、缩放和划线弹窗样式
 │       ├── main.js                   # 翻译/三 Agent 组装、热更新、只读路径枚举与 Zotero FilePicker 桥接
 │       ├── preferences.xhtml         # 翻译/公共 ACP 环境、路径候选/编辑/浏览、三 Agent Tab 与开发者模式
-│       ├── preferences.js            # 设置页路径发现、Tab、按模型思考默认项、互斥检测/准备和迟到回调隔离
+│       ├── preferences.js            # 设置页路径发现、Tab、按模型思考默认项及无可调档位提示、互斥检测/准备和迟到回调隔离
 │       └── preferences.css           # 设置页路径组合控件、分段 Tab、窄布局与诊断样式
 ├── tests/
 │   ├── helpers.js                    # Zotero、缓存/偏好 mock 与 Gecko Windows 原生路径契约
@@ -135,9 +138,9 @@ zotero-translate/
 │   ├── chat-cache.test.js            # 旧 Codex 兼容与三 Agent 镜像/配置/媒体目录隔离、损坏备份、并发和归档清理
 │   ├── pdf-screenshot.test.js         # 原页截图坐标/渲染、跨页/域、9/10 精确版本与 Reading Mode 失败关闭
 │   ├── api.test.js                   # 请求结构、隐私和错误映射
-│   ├── pi-acp-compat.test.js          # max/能力/确认失败/哈希拒绝；可选现成适配器无提示词验证
-│   ├── opencode-acp.test.js         # 原生参数/认证、OSC/长消息、模型收集握手/取消回收、能力与临时数据清理
-│   ├── acp-client.test.js            # Windows/Unix 原生路径/PATH/NVM/软链接、JSONL、npm/原生准备与清理
+│   ├── pi-acp-compat.test.js          # max/能力/确认失败/哈希拒绝、Windows 无 shell RPC；可选现成适配器验证
+│   ├── opencode-acp.test.js         # Unix/Windows 原生参数、Windows 真实进程 EOF/退出/取消、OSC/长消息、模型能力与临时数据清理
+│   ├── acp-client.test.js            # 跨平台路径/候选/PATH、Windows Pi 脚本检测、JSONL、npm/原生准备与清理
 │   ├── agents-chat.test.js           # Agent 切换/偏好、忙碌锁、Pi/OpenCode 每论文连接隔离与探测生命周期
 │   ├── codex-chat.test.js            # 三 Agent 配置/恢复、原生 PDF/媒体、UTF-8 输出限幅/幂等迁移、流式与图表隔离
 │   ├── codex-chat-ui.test.js         # Agent/草稿/选择、挂载后滚动恢复/迟到 toggle、安全渲染/外链与图表清理
@@ -150,53 +153,11 @@ zotero-translate/
 │   ├── item-tree-ui.test.js          # 智能标签列、异步刷新、渲染安全与清理
 │   └── reader-ui.test.js             # 选区/截图 Agents 入口、划线翻译/禁用、术语删除/重试、Tabs、拖拽缩放和陈旧 UI 防护
 ├── scripts/
-│   ├── build.sh                      # 完整 XPI 构建与归档检查入口
+│   ├── build.sh                      # 完整 XPI 构建、unzip 检查与 shasum/sha256sum 校验入口
 │   ├── build_xpi.py                  # 无依赖、可复现的 XPI 打包器
 │   └── validate_static.py            # 清单、XHTML 和安全边界检查
 └── dist/                             # 生成的交付物，不是运行时源码
-    ├── smart-paper-translator-0.1.41.xpi         # 当前版本交付物
-    ├── smart-paper-translator-0.1.40.xpi         # 上一版本归档
-    ├── smart-paper-translator-0.1.39.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.38.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.37.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.36.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.35.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.34.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.33.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.32.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.31.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.30.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.29.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.28.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.27.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.26.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.25.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.24.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.23.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.22.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.21.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.20.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.19.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.18.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.17.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.16.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.15.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.14.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.13.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.12.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.11.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.10.xpi         # 历史版本归档
-    ├── smart-paper-translator-0.1.9.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.8.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.7.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.6.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.5.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.4.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.3.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.2.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.1.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.0.xpi          # 历史版本归档
-    ├── smart-paper-translator-0.1.0-source.zip   # 历史版本源码归档
+    ├── smart-paper-translator-0.1.42.xpi         # 当前版本交付物
     └── SHA256SUMS
 ```
 
@@ -221,6 +182,8 @@ npm run check
 sh scripts/build.sh
 shasum -a 256 -c dist/SHA256SUMS
 ```
+
+Windows Git Bash 如无 `shasum`，构建脚本自动使用 `sha256sum` 写入同格式校验文件，验证时执行 `sha256sum -c dist/SHA256SUMS`。
 
 可选的已准备 Pi 适配器验证：设置 `SPT_TEST_PI_ACP_ENTRY=/absolute/path/to/pi-acp/dist/index.js`，执行 `node --test tests/pi-acp-compat.test.js`。只对现成模块做初始化握手和使用假 Pi RPC 的配置方法验证，不下载、不创建真实 Pi 会话、不调用模型。
 

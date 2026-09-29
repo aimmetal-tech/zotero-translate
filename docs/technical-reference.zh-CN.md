@@ -2,7 +2,7 @@
 
 [English introduction](../README.md) · [中文介绍](../README.zh-CN.md)
 
-本文保留 Smart Paper Translator 0.1.41 的详细功能、配置、数据边界与开发说明。文末的验证结果是对应版本的历史记录。
+本文保留 Smart Paper Translator 0.1.42 的详细功能、配置、数据边界与开发说明。文末的验证结果是对应版本的历史记录。
 
 Agents 通过 [Agent Client Protocol](https://agentclientprotocol.com/) stdio 连接本机 Codex / Pi / OpenCode，与翻译服务及其 API Key 分开配置。
 
@@ -149,10 +149,30 @@ smart-paper-translator/
 npm run check
 sh scripts/build.sh
 shasum -a 256 -c dist/SHA256SUMS
-unzip -t dist/smart-paper-translator-0.1.41.xpi
+unzip -t dist/smart-paper-translator-0.1.42.xpi
 ```
 
+Windows Git Bash 如无 `shasum`，构建脚本改用 `sha256sum` 生成同格式校验文件，并以 `sha256sum -c dist/SHA256SUMS` 验证。
+
 真实 npx 下载、Codex/Pi/OpenCode 模型用量测试、插件安装和 UI 冒烟测试不属于自动构建；这些操作需要分别明确授权。真实 E2E 应使用合成 PDF，不发送用户论文。
+
+## 0.1.42：Windows Pi / OpenCode 启动与检测修复
+
+Windows Zotero 中 Pi 的 `cli.js --version` 已返回 0.85.1，随后 `pi-acp` 退出的根因是 npm exec 将 `C:\Program Files\nodejs\node.exe` 当作 shell 命令拆成 `C:\Program`；改成 `node` 后又暴露出长 `--eval` 超过 cmd 命令行上限。固定适配器入口的 SHA-256 与预期一致，独立初始化和假 Pi RPC 配置验证通过。Pi 的 npm exec 子命令现在使用 `node` 命令名，已选 Node 目录仍在 PATH 首位；兼容源码只在当前子进程环境传递，短 `--eval` 读取后立即删除变量。离线 npm 启动固定适配器并在 stdin EOF 后正常退出的本机验证已通过；`PI_ACP_PI_COMMAND`、固定版本、内存补丁与独立探测连接不变。
+
+本机 OpenCode 1.18.32 的 `opencode/big-pickle` 在 ACP 配置目录中只返回 `model` 和 `mode`，没有 `effort`。其模型目录虽声明可推理，却没有可选 variant；[该版本 OpenCode 源码](https://github.com/anomalyco/opencode/blob/v1.18.32/packages/opencode/src/acp/config-option.ts)在 variant 列表为空时不提供 `effort`。设置页和侧栏因此明确显示“没有可调思考档位，跟随 OpenCode 默认值”，不创建假档位，也不把缺席误报为检测失败。
+
+侧栏准备提示原先错误地把 OpenCode 的最低要求 1.18.30 与实际已检测版本 1.18.32 作完全相等比较，导致检测成功仍显示“请在插件设置中检测”。现在 OpenCode 依据已有准备状态显示提示，Codex/Pi 固定适配器继续校验完全一致；回归测试覆盖已检测、未检测及固定版本不匹配。
+
+Windows 上的 Pi npm 安装提供 `dist/bundle/cli.js`；设置页可只读发现该文件，版本检测通过已选 Node 执行 `cli.js --version`，不把 JavaScript 交给 Gecko 直接创建进程。`.cmd/.bat/.ps1` 路径会给出明确错误。`PI_ACP_PI_COMMAND` 继续保留所选 Pi 路径；固定 `pi-acp@0.0.33` 在校验包名、版本和 SHA-256 后，仅在插件启动的 Node 进程中把 Windows RPC 子进程改为 `node.exe cli.js --mode rpc`，参数独立传递并禁用 shell。适配器入口从 npm `.bin` 邻近的包目录定位；不修改 npm 缓存，聊天继续使用离线模式。
+
+Windows OpenCode 可只读发现全局 npm 包内的 `bin/opencode.exe`。盘符和 UNC 路径进入 Gecko 文件与进程 API 前转为本机分隔符，PATH 使用分号；模型目录检测直接启动 `.exe`，先关闭 stdin 让等待 EOF 的命令正常退出，再有界读取到退出，不执行 cmd/PowerShell。Unix 仍使用原有 `/bin/sh` 结束标记收集脚本。版本、能力、临时空会话、回环服务绑定、输出/超时上限、取消及清理规则不变。
+
+本次 Windows 开发机安装的是 Zotero **10.0.3**、Node **24.13.1**、Pi **0.85.1** 和 OpenCode **1.18.32**。两种 Agent 的本机版本命令已只读验证；自动测试使用合成 ACP/RPC 数据，不发送提示词。`npm run check` 共 **324 项测试：323 通过、1 项 Unix `/bin/sh` 集成测试在 Windows 跳过**，JavaScript 语法与静态检查通过。`sh scripts/build.sh` 生成 `dist/smart-paper-translator-0.1.42.xpi`，`unzip -t` 和 `sha256sum -c dist/SHA256SUMS` 通过；当时交付包的 SHA-256 为 `97c6f9af2508e54f65f2b63fe37b9e3a8a7ca36b4cc4be79587b6fcca2c3c53d`。本机 Zotero 10.0.3 对该交付包的非安装式 `AddonManager.getInstallForFile()` 返回 `error=0`、正确 ID/版本、`isCompatible=true`、`appDisabled=false`。经用户此前授权安装后，AddonManager 返回 `active=true`，profile 中插件 XPI 与当时交付包的 SHA-256 一致；在已打开的《Dive into Claude Code》Reader 中切换到 OpenCode，模型和运行模式正常显示，错误的“请检测”提示消失。本次验证未发送模型请求。
+
+2026-09-29 曾从当时的 `plugin/` 源码重新生成 0.1.42 XPI 和 `dist/SHA256SUMS`；该历史包的 SHA-256 为 `4909af310b3517bab36b2c6f8b9d49efc8e21618a8ead3f458862bc9e4b52ab7`。当时校验文件与归档哈希一致，44 个归档条目均与源码逐字节一致，归档完整性和静态检查通过；未重新执行 Zotero 原生解析或安装验证。
+
+本次继续保持版本 0.1.42。Windows 真实进程回归测试使用本机 `node.exe` 作为不联网的 `.exe` 测试程序：程序等待 stdin EOF 后分别正常输出、以非零状态退出或持续运行直到超时。测试先复现旧收集器的超时，再验证提前关闭 stdin 后能读取输出、保留退出码并终止超时进程；现有 Unix `/bin/sh` 集成测试仍只在 Unix 执行。`npm run check` 的等价分项共 325 项测试：324 通过、1 项 Unix 专用测试在 Windows 跳过；JavaScript 语法与静态检查通过。重新生成的 `dist/smart-paper-translator-0.1.42.xpi` 含 44 个与 `plugin/` 逐字节一致的运行时文件，`unzip -t` 和 `dist/SHA256SUMS` 校验通过，SHA-256 为 `c23d5152edf8ca5fef9fdf802411e61e84a40f2222e7478fe54eeeed2ab6722e`。本次尚未对重建包执行 Zotero 原生解析、安装或 UI 冒烟；真实 Zotero `Subprocess` 与 OpenCode 的 Windows 联合行为仍需在客户端核验。
 
 ## 0.1.41：Zotero 10 迁移
 

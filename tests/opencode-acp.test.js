@@ -29,6 +29,134 @@ test("native launch works without Node or npx and pins private local networking 
   assert.throws(() => Native.launchOptions({ executablePath: "opencode" }), { code: "ACP_PATH_INVALID" });
 });
 
+test("Windows OpenCode uses native drive and UNC paths without a shell", () => {
+  const previous = global.Zotero;
+  global.Zotero = { isWin: true };
+  try {
+  const options = Native.launchOptions({ executablePath: "C:/Program Files/OpenCode/opencode.exe",
+    cwd: "C:/Papers/Session One", dbPath: "C:/Temp/probe.sqlite", nodePath: "C:/Node/node.exe",
+    inheritedPath: "C:/Windows/System32;D:/Tools;/foreign" });
+  assert.equal(options.command, "C:\\Program Files\\OpenCode\\opencode.exe");
+  assert.equal(options.workdir, "C:\\Papers\\Session One");
+  assert.equal(options.environment.OPENCODE_DB, "C:\\Temp\\probe.sqlite");
+  assert.equal(options.environment.PATH, "C:\\Node;C:\\Program Files\\OpenCode;C:\\Windows\\System32;D:\\Tools");
+  assert.deepEqual(options.arguments.slice(0, 3), ["acp", "--cwd", "C:\\Papers\\Session One"]);
+  const model = Native.modelLaunchOptions({ executablePath: "C:/Program Files/OpenCode/opencode.exe", cwd: "C:/Temp" }, "unused-marker");
+  assert.equal(model.command, options.command);
+  assert.deepEqual(model.arguments, ["models", "--verbose"]);
+  assert.equal(model.environment.ENV, undefined);
+  assert.equal(Native.launchOptions({ executablePath: "\\\\server\\share\\opencode.exe", cwd: "\\\\server\\share\\paper" }).workdir,
+    "\\\\server\\share\\paper");
+  for (const path of ["C:opencode.exe", "/usr/bin/opencode", "\\opencode.exe", "relative.exe", "C:/bad\0path.exe", "C:/script.cmd"]) {
+    assert.throws(() => Native.launchOptions({ executablePath: path }), { code: "ACP_PATH_INVALID" });
+  }
+  }
+  finally { global.Zotero = previous; }
+});
+
+test("Windows OpenCode probe reads bounded model data and cleans its own temporary directory", async () => {
+  const fs = require("node:fs"), vm = require("node:vm"), path = require("node:path");
+  const launches = [], made = [], removed = [];
+  let serial = 0;
+  const modelOutput = "provider/model\n" + JSON.stringify({ providerID: "provider", id: "model",
+    capabilities: { input: { image: true, pdf: false } }, headers: { Authorization: "secret" } }) + "\n";
+  const context = vm.createContext({ TextEncoder, setTimeout, clearTimeout,
+    Zotero: { isWin: true },
+    Services: { appinfo: { OS: "WINNT" }, uuid: { generateUUID: () => String(++serial) },
+      env: { get: () => "C:/Windows/System32" }, dirsvc: { get: () => ({ path: "C:\\Temp" }) } },
+    Ci: { nsIFile: {} }, PathUtils: { join: path.win32.join },
+    IOUtils: { async makeDirectory(value) { made.push(value); }, async remove(value) { removed.push(value); } },
+    ChromeUtils: { importESModule: () => ({ Subprocess: { async call(options) {
+      launches.push(options);
+      const output = options.arguments[0] === "--version" ? "1.18.32\n" :
+        options.arguments[0] === "models" ? modelOutput : "";
+      let read = false;
+      return { stdin: { close: async () => {} }, kill: async () => {}, wait: async () => ({ exitCode: 0 }),
+        stdout: { readString: async () => read ? "" : (read = true, output) }, stderr: { readString: async () => "" } };
+    } } }) }
+  });
+  vm.runInContext(fs.readFileSync(require.resolve("../plugin/content/opencode-acp.js"), "utf8"), context);
+  const runtime = context.SmartPaperTranslatorModules.OpenCodeACP.createRuntime({ probe: true,
+    readPaths: () => ({ opencodePath: "C:/Program Files/OpenCode/opencode.exe" }) });
+  assert.equal(await runtime.readVersion(), "1.18.32");
+  const catalog = await runtime.readModelCatalog();
+  assert.equal(catalog["provider/model"].image, true);
+  assert.equal(JSON.stringify(catalog).includes("secret"), false);
+  await runtime.spawn({});
+  assert.ok(launches.every(item => item.command === "C:\\Program Files\\OpenCode\\opencode.exe"));
+  assert.ok(launches.every(item => !item.arguments.includes("/bin/sh")));
+  assert.equal(launches[2].workdir, made[0]);
+  await runtime.cleanup();
+  assert.deepEqual(removed, made);
+});
+
+test("Windows direct model collection closes stdin, preserves exit codes and terminates a real .exe", {
+  timeout: 10000, skip: process.platform !== "win32"
+}, async () => {
+  const fs = require("node:fs/promises"), path = require("node:path"), os = require("node:os");
+  const { spawn } = require("node:child_process");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spt opencode win "));
+  const launch = source => {
+    const options = Native.launchOptions({ executablePath: process.execPath, cwd: root,
+      inheritedPath: process.env.PATH || "" }, ["-e", source]);
+    assert.equal(options.command, process.execPath);
+    const child = spawn(options.command, options.arguments, { cwd: options.workdir,
+      env: { ...process.env, ...options.environment }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    const exited = new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", code => resolve({ exitCode: code }));
+    });
+    child.stdin.on("error", () => {});
+    const stdout = child.stdout[Symbol.asyncIterator](), stderr = child.stderr[Symbol.asyncIterator]();
+    const pipe = iterator => ({ async readString() {
+      const next = await iterator.next();
+      return next.done ? "" : next.value.toString("utf8");
+    } });
+    const processHandle = {
+      stdin: { close: async () => { child.stdin.end(); } },
+      stdout: pipe(stdout), stderr: pipe(stderr), wait: () => exited,
+      kill: async () => { if (child.exitCode === null && child.signalCode === null) child.kill(); return exited; }
+    };
+    return { child, processHandle, exited };
+  };
+  let running;
+  try {
+    running = launch('process.stdin.resume(); process.stdin.on("end", () => { process.stdout.write("model output"); });');
+    const startupTimers = { setTimeout: callback => setTimeout(callback, 3000), clearTimeout };
+    assert.equal(await Native.collect(running.processHandle, 65536, startupTimers), "model output");
+    assert.equal((await running.exited).exitCode, 0);
+
+    running = launch('process.stdin.resume(); process.stdin.on("end", () => { process.stdout.write("model output"); process.exitCode = 17; });');
+    await assert.rejects(Native.collect(running.processHandle, 65536, startupTimers), error =>
+      error.code === "OPENCODE_PROCESS_FAILED" && error.message.includes("17") && !error.message.includes("model output"));
+    assert.equal((await running.exited).exitCode, 17);
+
+    running = launch('process.stdin.resume(); process.stdin.on("end", () => { process.stdout.write("ready"); setInterval(() => {}, 1000); });');
+    const timers = { setTimeout: callback => setTimeout(callback, 500), clearTimeout };
+    await assert.rejects(Native.collect(running.processHandle, Native.MAX_MODEL_BYTES, timers), { code: "OPENCODE_TIMEOUT" });
+    await running.exited;
+    assert.equal(running.child.killed, true);
+  }
+  finally {
+    if (running?.child.exitCode === null && running.child.signalCode === null) {
+      running.child.kill();
+      await running.exited;
+    }
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Windows direct model collection requests cleanup for a stalled process", async () => {
+  let closed = 0, killed = 0;
+  const blocked = new Promise(() => {});
+  const process = { wait: () => blocked, stdout: { readString: () => blocked }, stderr: { readString: () => blocked },
+    stdin: { close: async () => { closed++; } }, kill: async () => { killed++; } };
+  const timers = { setTimeout: callback => setTimeout(callback, 0), clearTimeout };
+  await assert.rejects(Native.collect(process, Native.MAX_MODEL_BYTES, timers), { code: "OPENCODE_TIMEOUT" });
+  assert.equal(closed, 1);
+  assert.equal(killed, 1);
+});
+
 test("OpenCode title controls are filtered across every chunk boundary without changing JSON strings", () => {
   const message = JSON.stringify({ result: { name: "中文模型", text: "\x1b]0;quoted\x07" } });
   const wire = "\x1b]0;paper: ready\x07" + message + "\n\x1b]2;paper: busy\x1b\\";
@@ -75,7 +203,7 @@ test("model command keeps user paths in argv and releases its pipe only after co
   await assert.rejects(Native.collect(process, 100, global, "private-marker"), { code: "OPENCODE_OUTPUT_INCOMPLETE" });
 });
 
-test("native model collector preserves exit status and reaps its child on cancellation", { timeout: 5000 }, async () => {
+test("native model collector preserves exit status and reaps its child on cancellation", { timeout: 5000, skip: process.platform === "win32" }, async () => {
   const fs = require("node:fs/promises"), path = require("node:path"), os = require("node:os");
   const { spawn } = require("node:child_process");
   const { once } = require("node:events");

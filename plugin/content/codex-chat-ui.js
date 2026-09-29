@@ -2407,6 +2407,14 @@
         labelElement.append(picker);
         container.append(labelElement);
       }
+      if (agentId === "opencode" && !state.configOptions.some((entry) =>
+        entry.id === "reasoning_effort" && (entry.options || entry.values || []).length)) {
+        const note = doc.createElement("p");
+        note.className = "spt-codex-config-hint";
+        setLocalizedText(note, "smart-paper-translator-agents-opencode-no-effort",
+          "此模型没有可调思考档位；新会话跟随 OpenCode 默认值");
+        container.append(note);
+      }
     }
 
     _renderNotices(view, state) {
@@ -2444,12 +2452,16 @@
         );
         container.append(notice);
       }
-      if (!state.adapter.preparedVersion || state.adapter.preparedVersion !== state.adapter.requiredVersion) {
+      const provider = Agents.getProvider(agentId);
+      const prepared = state.adapter?.preparedVersion;
+      // Native OpenCode records its detected 1.x version; requiredVersion is
+      // only the minimum supported version. Pinned npm adapters require exact equality.
+      if (!prepared || (provider.runtime !== "native" && prepared !== state.adapter.requiredVersion)) {
         const notice = doc.createElement("div");
         notice.className = "spt-codex-notice";
         if (agentId === "opencode") setLocalizedText(notice, "smart-paper-translator-agents-opencode-needs-setup", "请在插件设置中选择本机程序并检测 OpenCode。");
-        else setLocalizedText(notice, "smart-paper-translator-agents-not-prepared", `尚未准备 ${Agents.getProvider(agentId).command} ${state.adapter.requiredVersion}。请先到插件设置执行“准备并检测 ACP”。`,
-          { adapter: Agents.getProvider(agentId).command, version: state.adapter.requiredVersion });
+        else setLocalizedText(notice, "smart-paper-translator-agents-not-prepared", `尚未准备 ${provider.command} ${state.adapter.requiredVersion}。请先到插件设置执行“准备并检测 ACP”。`,
+          { adapter: provider.command, version: state.adapter.requiredVersion });
         container.append(notice);
       }
       for (const interaction of state.pendingInteractions) {

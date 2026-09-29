@@ -385,16 +385,16 @@
       }
     },
 
-    _populateCodexSelect(id, option, savedValue, agent = "Codex") {
+    _populateCodexSelect(id, option, savedValue, agent = "Codex", emptyState = null) {
       const select = this.doc.getElementById(id);
       select.replaceChildren();
       const inherited = this.doc.createElement("option");
       inherited.value = "";
       inherited.textContent = option?.currentValue
         ? `跟随 ${agent} 当前值（${option.currentValue}）`
-        : "尚未读取选项，请准备或重新检测 ACP";
+        : emptyState?.text || "尚未读取选项，请准备或重新检测 ACP";
       if (agent !== "Codex") this._localize(inherited,
-        option?.currentValue ? "inherit" : "options-unavailable", inherited.textContent,
+        emptyState?.id || (option?.currentValue ? "inherit" : "options-unavailable"), inherited.textContent,
         { agent, value: option?.currentValue || "" });
       select.append(inherited);
       const values = (option?.options || []).map((entry) =>
@@ -613,16 +613,24 @@
     },
 
     renderOpenCodeReasoning(resetInvalid = false) {
-      const model = this.doc.getElementById("spt-opencode-default-model").value;
-      const options = this.opencodeCatalog?.configOptionsByModel?.[model] || this.opencodeCatalog?.configOptions || [];
+      const base = this.opencodeCatalog?.configOptions || [];
+      const model = this.doc.getElementById("spt-opencode-default-model").value ||
+        base.find(entry => entry.id === "model")?.currentValue || "";
+      const byModel = this.opencodeCatalog?.configOptionsByModel || {};
+      const detectedModel = Boolean(model && Object.prototype.hasOwnProperty.call(byModel, model));
+      const options = detectedModel ? byModel[model] : base;
       const reasoning = options.find(entry => entry.id === "reasoning_effort");
       const values = (reasoning?.options || []).map(entry => typeof entry === "string" ? entry : entry?.value);
       let saved = this.doc.getElementById("spt-opencode-default-reasoning").value;
-      if (resetInvalid && saved && !values.includes(saved)) {
+      if ((resetInvalid || (detectedModel && !reasoning)) && saved && !values.includes(saved)) {
         saved = "";
         this._setBoundValue("spt-opencode-default-reasoning", "");
       }
-      this._populateCodexSelect("spt-opencode-default-reasoning", reasoning, saved, "OpenCode");
+      this._populateCodexSelect("spt-opencode-default-reasoning", reasoning, saved, "OpenCode",
+        detectedModel && !reasoning ? {
+          id: "opencode-no-effort",
+          text: "此模型没有可调思考档位；新会话跟随 OpenCode 默认值"
+        } : null);
     },
 
     renderOpenCodeStatus(result = {}) {

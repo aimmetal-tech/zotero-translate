@@ -86,6 +86,24 @@ test("Pi default reasoning clears max when the newly chosen model does not suppo
   manager.destroy();
 });
 
+test("OpenCode models without effort options show the native default instead of an undetected state", () => {
+  const { manager, byID } = preferencesFixture();
+  const model = byID.get("spt-opencode-default-model");
+  const reasoning = byID.get("spt-opencode-default-reasoning");
+  manager.opencodeCatalog = {
+    configOptions: [{ id: "model", currentValue: "opencode/big-pickle", options: [{ value: "opencode/big-pickle" }] }],
+    configOptionsByModel: { "opencode/big-pickle": [{ id: "model", currentValue: "opencode/big-pickle" }] }
+  };
+  model.value = "";
+  reasoning.value = "high";
+  manager.renderOpenCodeReasoning();
+  assert.equal(reasoning.value, "");
+  assert.equal(reasoning.disabled, true);
+  assert.match(reasoning.children[0].textContent, /OpenCode 默认值/u);
+  assert.equal(reasoning.children[0].attrs["data-l10n-id"], "smart-paper-translator-agents-opencode-no-effort");
+  manager.destroy();
+});
+
 test("settings tabs preserve each agent's fields and keep one shared Node / npx outside both panels", () => {
   const { manager, byID, calls } = preferencesFixture();
   byID.get("spt-codex-default-model").value = "codex-model";

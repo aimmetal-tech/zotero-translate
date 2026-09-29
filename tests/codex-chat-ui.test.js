@@ -1334,11 +1334,11 @@ test("Item Pane Fluent messages localize attributes without replacing the sectio
     );
     assert.match(
       source,
-      /^smart-paper-translator-codex-chat-pane-header[ \t]*=[ \t]*$\n[ \t]+\.label[ \t]*=[ \t]*\S/mu
+      /^smart-paper-translator-codex-chat-pane-header[ \t]*=[ \t]*\r?\n[ \t]+\.label[ \t]*=[ \t]*\S/mu
     );
     assert.match(
       source,
-      /^smart-paper-translator-codex-chat-pane-sidenav[ \t]*=[ \t]*$\n[ \t]+\.tooltiptext[ \t]*=[ \t]*\S/mu
+      /^smart-paper-translator-codex-chat-pane-sidenav[ \t]*=[ \t]*\r?\n[ \t]+\.tooltiptext[ \t]*=[ \t]*\S/mu
     );
     assert.doesNotMatch(
       source,
@@ -1600,4 +1600,38 @@ test("OpenCode exposes native session modes with full labels and rolls back reje
   ui._renderConfig(view, state);
   assert.equal(descendants(view.elements.configuration).find(node => node.localName === "select").disabled, true);
   ui._destroyView(body);
+});
+
+test("OpenCode sidebar explains when the selected model exposes no effort control", () => {
+  const doc = new Document(), body = doc.createElement("section");
+  const ui = new CodexChatUI({ service: { forAgent: () => ({ setSessionConfig: async () => {} }) } });
+  ui._renderShell({ doc, body });
+  const view = ui.views.get(body); view.attachmentID = 10; view.agentId = "opencode";
+  ui._renderConfig(view, { status: "ready", configOptions: [
+    { id: "model", currentValue: "opencode/big-pickle", options: [{ value: "opencode/big-pickle" }] }
+  ], record: { session: { id: null, config: {} } } });
+  assert.ok(descendants(view.elements.configuration).some(node =>
+    node.getAttribute?.("data-l10n-id") === "smart-paper-translator-agents-opencode-no-effort"));
+  ui._destroyView(body);
+});
+
+test("sidebar hides OpenCode setup notice after detecting a newer supported version", () => {
+  const doc = new Document(), notices = doc.createElement("div");
+  const ui = new CodexChatUI({ service: {} });
+  const view = { body: { ownerDocument: doc }, attachmentID: 10, agentId: "opencode",
+    requestSerial: 1, elements: { notices } };
+  const state = { pendingInteractions: [], adapter: { preparedVersion: "1.18.32", requiredVersion: "1.18.30" } };
+  ui._renderNotices(view, state);
+  assert.equal(notices.children.length, 0);
+
+  state.adapter.preparedVersion = "";
+  ui._renderNotices(view, state);
+  assert.equal(notices.children[0].getAttribute("data-l10n-id"),
+    "smart-paper-translator-agents-opencode-needs-setup");
+
+  view.agentId = "pi";
+  state.adapter = { preparedVersion: "0.0.34", requiredVersion: "0.0.33" };
+  ui._renderNotices(view, state);
+  assert.equal(notices.children[0].getAttribute("data-l10n-id"),
+    "smart-paper-translator-agents-not-prepared");
 });

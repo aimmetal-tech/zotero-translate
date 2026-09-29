@@ -80,6 +80,7 @@ smart-paper-translator-agents-path-option =
         [nvm] NVM { $version } · { $path }
         [path] PATH · { $path }
         [node] 所选 Node · { $path }
+        [npm] npm 安装包 · { $path }
        *[standard] 常见位置 · { $path }
     }
 
@@ -92,3 +93,4 @@ smart-paper-translator-agents-opencode-inspect = 检测 OpenCode
 smart-paper-translator-agents-opencode-offline = 原生启动使用本机 OpenCode，禁用自动升级与依赖下载。检测使用独立临时数据库和空会话，结束后清理；不会创建模型回复或修改原有 OpenCode 会话。
 smart-paper-translator-agents-opencode-access = OpenCode 按本机配置执行工具；需要授权时会在当前对话中询问。运行模式仅作用于当前论文会话。
 smart-paper-translator-agents-opencode-needs-setup = 请在插件设置中选择本机程序并检测 OpenCode。
+smart-paper-translator-agents-opencode-no-effort = 此模型没有可调思考档位；新会话跟随 OpenCode 默认值。

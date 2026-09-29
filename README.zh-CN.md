@@ -49,7 +49,7 @@ OpenCode 还可以在「运行模式」中选择 **Build、Plan 和本机自定�
 
 ## 开始使用
 
-当前版本为 **0.1.41**，目标环境是 **macOS 上的 Zotero 10.0.4**，保留 Zotero 9 支持，插件清单兼容范围为 Zotero 9.0–10.0.x。Agents 侧栏用于 Zotero 主窗口中的 PDF 标签页，暂不支持独立阅读器窗口。
+当前版本为 **0.1.42**，目标环境是 **macOS 上的 Zotero 10.0.4**，保留 Zotero 9 支持，插件清单兼容范围为 Zotero 9.0–10.0.x。Agents 侧栏用于 Zotero 主窗口中的 PDF 标签页，暂不支持独立阅读器窗口。
 
 PDF 原页截图仅在逐项验证过的 **9.0.6 和 10.0.4** 开放。截图时请使用 PDF 原页视图，Zotero 10 的重排阅读模式（Reading Mode）不支持截图；其他补丁版本需核对私有 PDF.js 桥后再开放。
 
@@ -84,6 +84,10 @@ PDF 原页截图仅在逐项验证过的 **9.0.6 和 10.0.4** 开放。截图时
 ![公共 Node 和 npx 路径，以及 Pi 的模型、思考强度和适配器准备状态](docs/screenshots/agent-settings.png)
 
 Codex 和 Pi 共用 Node / npx 运行环境，各自配置模型与思考强度。上图展示已有的 Pi 面板。
+
+Windows 上的 Pi 应选择 `node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js`（或原生 `pi.exe`），不要选 npm 的 `.cmd` / `.ps1` 包装文件；插件用已选 Node 执行该入口的检测和 RPC。OpenCode 应选择 `node_modules/opencode-ai/bin/opencode.exe` 或其他本机 `.exe`，检测直接运行，不使用 shell。这两个 npm 包入口会在存在时进入只读候选列表。
+
+如果当前 OpenCode 模型没有返回可调的思考档位，设置页和侧栏会明确显示新会话跟随 OpenCode 默认值；插件不会根据模型名称猜测档位。
 
 连接 **OpenCode 1.18.30 或更新的稳定版 1.x**：打开 **OpenCode** 标签页，选择本机可执行文件（会枚举 `~/.opencode/bin`），点击「检测 OpenCode」，然后选择默认模型与思考强度。路径为空时会自动采用找到的首个本机候选，已有或手动输入的路径保持不变。检测通过独立空会话和临时数据库读取选项，不发送提示词、不下载依赖，结束后清理临时数据。若缺少依赖或登录，请先在终端运行 `opencode` 完成准备，再回来检测。
 
@@ -124,7 +128,7 @@ OpenCode 图片提问要求检测目录明确声明当前模型支持图片；�
 npm run check
 sh scripts/build.sh
 shasum -a 256 -c dist/SHA256SUMS
-unzip -t dist/smart-paper-translator-0.1.41.xpi
+unzip -t dist/smart-paper-translator-0.1.42.xpi
 ```
 
 构建产物输出到 `dist/`。涉及运行时代码的修改，还需要在目标 Zotero 版本中对 XPI 做非安装式解析。适配器行为、存储结构、渲染限制和历史验证结果见[配置与实现参考](docs/technical-reference.zh-CN.md)。

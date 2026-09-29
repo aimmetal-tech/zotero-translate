@@ -2,7 +2,7 @@
   "use strict";
 
   const modules = global.SmartPaperTranslatorModules = global.SmartPaperTranslatorModules || {};
-  const REVISION = "pi-thinking-levels-1";
+  const REVISION = "pi-thinking-levels-windows-2";
   // Exact npm pi-acp@0.0.33 dist/index.js, verified against the prepared adapter.
   const ADAPTER_SHA256 = "24ff73fda6e3c76ddce2d359a79f5c4b8f292eb290e4d2ab85aac94676b2c2dc";
 
@@ -47,6 +47,13 @@
   }
 
   function patchAdapterSource(source) {
+    const replaceUnique = (original, replacement) => {
+      const from = source.indexOf(original);
+      if (from < 0 || source.indexOf(original, from + original.length) !== -1) {
+        throw new Error("SPT_PI_COMPAT_LAYOUT: The pinned adapter layout has changed");
+      }
+      source = source.slice(0, from) + replacement + source.slice(from + original.length);
+    };
     const replaceBlock = (start, end, replacement) => {
       const from = source.indexOf(start);
       const to = source.indexOf(end, from + start.length);
@@ -59,6 +66,17 @@
       [isThinkingLevel, sptAvailableThinkingLevels, getThinkingState, sptSetThinkingLevel].map(fn => fn.toString()).join("\n"));
     replaceBlock("  async setThinkingLevel(level) {", "  async setFollowUpMode(mode) {",
       "  async setThinkingLevel(level) { return sptSetThinkingLevel.call(this, level); }");
+    // The pinned adapter normally spawns PI_ACP_PI_COMMAND directly. A Windows
+    // npm cli.js needs the selected Node as its interpreter, never cmd.exe.
+    replaceUnique("const child = spawn(cmd, args, {",
+      "const sptPiScript = process.platform === \"win32\" && /\\.js$/iu.test(cmd);\n    const child = spawn(sptPiScript ? process.execPath : cmd, sptPiScript ? [cmd, ...args] : args, {");
+    const spawnStart = source.indexOf("const sptPiScript =");
+    const shellText = "shell: shouldUseShellForPiCommand(cmd)";
+    const shellFrom = source.indexOf(shellText, spawnStart);
+    if (spawnStart < 0 || shellFrom < 0 || shellFrom - spawnStart > 500) {
+      throw new Error("SPT_PI_COMPAT_LAYOUT: The pinned adapter layout has changed");
+    }
+    source = source.slice(0, shellFrom) + "shell: sptPiScript ? false : shouldUseShellForPiCommand(cmd)" + source.slice(shellFrom + shellText.length);
     return source;
   }
 
@@ -74,9 +92,14 @@
     let entry;
     for (const directory of (process.env.PATH || "").split(path.delimiter)) {
       if (!path.isAbsolute(directory)) continue;
-      const candidate = path.join(directory, "pi-acp");
-      try { entry = fs.realpathSync(candidate); break; }
-      catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error; }
+      const candidates = process.platform === "win32"
+        ? [path.join(directory, "..", "pi-acp", "dist", "index.js")]
+        : [path.join(directory, "pi-acp")];
+      for (const candidate of candidates) {
+        try { entry = fs.realpathSync(candidate); break; }
+        catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error; }
+      }
+      if (entry) break;
     }
     if (!entry) throw new Error("SPT_PI_COMPAT_MISSING: Prepare pi-acp 0.0.33 in plugin settings");
     const stat = fs.statSync(entry);

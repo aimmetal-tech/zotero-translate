@@ -46,6 +46,30 @@ exit "$spt_exit"`;
     return typeof path === "string" && path.startsWith("/") && path.length <= 4096 && !/[\0\r\n]/u.test(path);
   }
 
+  function usesWindowsPaths(path) {
+    try {
+      if (typeof global.Zotero?.isWin === "boolean") return global.Zotero.isWin;
+      if (global.Services?.appinfo?.OS) return global.Services.appinfo.OS === "WINNT";
+    }
+    catch (_error) {}
+    return typeof path === "string" && (/^[A-Za-z]:[\\/]/u.test(path) || /^(?:\\\\|\/\/)/u.test(path));
+  }
+
+  function nativeAbsolutePath(path, windows) {
+    if (typeof path !== "string" || path.length > 4096 || /[\0\r\n]/u.test(path)) return "";
+    if (modules.ACP?.toNativeAbsolutePath) return modules.ACP.toNativeAbsolutePath(path, windows);
+    if (!windows) return absolutePath(path) ? path : "";
+    if (!/^(?:[A-Za-z]:[\\/]|(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+(?:[\\/]|$))/u.test(path)) return "";
+    return path.replace(/\//gu, "\\");
+  }
+
+  function parentPath(path, windows) {
+    const separator = windows ? "\\" : "/";
+    const index = path.lastIndexOf(separator);
+    if (windows && index === 2 && /^[A-Za-z]:\\/u.test(path)) return path.slice(0, 3);
+    return index < 0 ? "" : path.slice(0, index) || separator;
+  }
+
   // Local terminal-title plugins can emit OSC 0/1/2 even in ACP mode.
   // These are literal control bytes, unlike escaped characters inside JSON.
   // Accept only bounded title sequences; arbitrary logs and other OSC commands
@@ -134,21 +158,29 @@ exit "$spt_exit"`;
   }
 
   function launchOptions({ executablePath, cwd, password, dbPath, nodePath, inheritedPath = "" }, args) {
-    if (!absolutePath(executablePath) || (cwd && !absolutePath(cwd)) || (dbPath && !absolutePath(dbPath))) {
+    const windows = usesWindowsPaths(executablePath);
+    const requestedCwd = cwd, requestedDbPath = dbPath;
+    executablePath = nativeAbsolutePath(executablePath, windows);
+    cwd = cwd ? nativeAbsolutePath(cwd, windows) : cwd;
+    dbPath = dbPath ? nativeAbsolutePath(dbPath, windows) : dbPath;
+    if (!executablePath || (windows && !/\.exe$/iu.test(executablePath)) ||
+        (requestedCwd && !cwd) || (requestedDbPath && !dbPath)) {
       throw fail("ACP_PATH_INVALID", "OpenCode 必须使用已选择的本机绝对路径");
     }
-    const parent = path => path.slice(0, path.lastIndexOf("/")) || "/";
+    const separator = windows ? ";" : ":";
     const directories = [
-      ...(absolutePath(nodePath) ? [parent(nodePath)] : []), parent(executablePath),
-      ...inheritedPath.split(":"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"
-    ].filter(absolutePath);
+      ...(nativeAbsolutePath(nodePath, windows) ? [parentPath(nativeAbsolutePath(nodePath, windows), windows)] : []),
+      parentPath(executablePath, windows),
+      ...inheritedPath.split(separator),
+      ...(windows ? [] : ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])
+    ].map(path => nativeAbsolutePath(path, windows)).filter(Boolean);
     return {
       command: executablePath,
       arguments: args || ["acp", "--cwd", cwd, "--hostname", "127.0.0.1", "--port", "0", "--mdns=false"],
       ...(cwd ? { workdir: cwd } : {}),
       environmentAppend: true,
       environment: {
-        PATH: [...new Set(directories)].join(":"),
+        PATH: [...new Set(directories)].join(separator),
         OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_MODELS_FETCH: "1",
         OPENCODE_DISABLE_TERMINAL_TITLE: "1", NO_COLOR: "1",
         npm_config_offline: "true", npm_config_audit: "false", npm_config_fund: "false",
@@ -162,6 +194,7 @@ exit "$spt_exit"`;
 
   function modelLaunchOptions(settings, marker) {
     const options = launchOptions(settings, ["models", "--verbose"]);
+    if (usesWindowsPaths(options.command)) return options;
     return {
       ...options,
       command: "/bin/sh",
@@ -171,7 +204,7 @@ exit "$spt_exit"`;
   }
 
   async function collect(process, maxBytes = 65536, timers = global, marker = "") {
-    let timeout;
+    let timeout, stdinClosed = false;
     const read = async (pipe, limit, endMarker = "", filter = null) => {
       let text = "", bytes = 0;
       const suffix = endMarker ? "\n" + endMarker + "\n" : "";
@@ -192,6 +225,11 @@ exit "$spt_exit"`;
       }
     };
     try {
+      // Directly launched executables do not need the Unix marker handshake.
+      // Give them stdin EOF before waiting, so a CLI that reads stdin can exit.
+      if (!marker) {
+        try { await process.stdin?.close?.(); stdinClosed = true; } catch (_error) {}
+      }
       const [status, stdout, stderr] = await Promise.race([
         Promise.all([process.wait(), read(process.stdout, maxBytes, marker, new TerminalTitleFilter()), read(process.stderr, 65536)]),
         new Promise((_, reject) => { timeout = timers.setTimeout(() => reject(fail("OPENCODE_TIMEOUT", "OpenCode 本地检测超时")), 30000); })
@@ -204,7 +242,7 @@ exit "$spt_exit"`;
     }
     finally {
       timers.clearTimeout(timeout);
-      try { await process.stdin?.close?.(); } catch (_error) {}
+      if (!stdinClosed) try { await process.stdin?.close?.(); } catch (_error) {}
       try { await process.kill?.(1000); } catch (_error) {}
     }
   }
@@ -230,13 +268,16 @@ exit "$spt_exit"`;
       if (cleaning) await cleaning;
       if (context) return context;
       if (probe) {
-        const root = global.PathUtils.join(global.Services.dirsvc.get("TmpD", global.Ci.nsIFile).path, "spt-opencode-probe-" + uuid());
+        const windows = usesWindowsPaths(readPaths().opencodePath);
+        const root = nativeAbsolutePath(global.PathUtils.join(global.Services.dirsvc.get("TmpD", global.Ci.nsIFile).path, "spt-opencode-probe-" + uuid()), windows);
+        if (!root) throw fail("ACP_PATH_INVALID", "OpenCode 临时目录不是本机绝对路径");
         await global.IOUtils.makeDirectory(root, { permissions: 0o700 });
         context = { root, cwd: root, dbPath: global.PathUtils.join(root, "probe.sqlite"), password: uuid() + uuid() };
       }
       else {
-        if (!absolutePath(cwd)) throw fail("ACP_PATH_INVALID", "OpenCode 需要当前论文的独立工作区");
-        context = { cwd, password: uuid() + uuid() };
+        const nativeCwd = nativeAbsolutePath(cwd, usesWindowsPaths(readPaths().opencodePath));
+        if (!nativeCwd) throw fail("ACP_PATH_INVALID", "OpenCode 需要当前论文的独立工作区");
+        context = { cwd: nativeCwd, password: uuid() + uuid() };
       }
       return context;
     };
@@ -254,7 +295,7 @@ exit "$spt_exit"`;
       getWorkingDirectory() { return context?.cwd; },
       async readModelCatalog() {
         const current = await ensureContext();
-        const marker = "SPT_MODELS_END_" + uuid();
+        const marker = usesWindowsPaths(readPaths().opencodePath) ? "" : "SPT_MODELS_END_" + uuid();
         const process = await call(modelLaunchOptions({ ...settings(), ...current }, marker));
         try { return parseModelCatalog(await collect(process, MAX_MODEL_BYTES, global, marker)); }
         finally { processes.delete(process); }

@@ -416,6 +416,46 @@ test("Windows runtime inspection and spawning normalize paths without changing t
   finally { Object.assign(global, saved); }
 });
 
+test("Windows Pi cli.js is inspected through Node and shell shims are rejected", async () => {
+  const names = ["PathUtils", "Services", "IOUtils", "ChromeUtils", "Zotero"];
+  const saved = Object.fromEntries(names.map(name => [name, global[name]]));
+  const paths = { nodePath: "C:/Program Files/node/node.exe", npxCliPath: "C:/Program Files/node/npx-cli.js",
+    piPath: "C:/Users/test/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" };
+  const calls = [];
+  global.PathUtils = windowsPathUtils(); global.Zotero = { isWin: true };
+  global.Services = { env: { get: () => "C:/Windows/System32" } };
+  global.IOUtils = { exists: async path => { assertNativeWindowsPath(path); return true; } };
+  global.ChromeUtils = { importESModule: () => ({ Subprocess: { async call(options) {
+    calls.push(options);
+    const stdout = options.arguments.length === 1 ? "v24.13.1" :
+      options.arguments.at(-1) === "--version" && options.arguments.length === 2 && options.arguments[0].endsWith("cli.js") ? "0.85.1" : "11.9.0";
+    let read = false;
+    return { wait: async () => ({ exitCode: 0 }), stdout: { readString: async () => read ? "" : (read = true, stdout) },
+      stderr: { readString: async () => "" } };
+  } } }) };
+  try {
+    const runtime = await inspectLocalRuntime(paths, "pi");
+    assert.equal(runtime.healthy, true);
+    assert.deepEqual(calls[2].arguments, [paths.piPath.replaceAll("/", "\\"), "--version"]);
+    assert.equal(calls[2].command, paths.nodePath.replaceAll("/", "\\"));
+    assert.equal(runtime.paths.piPath, paths.piPath.replaceAll("/", "\\"));
+    await createSubprocess(paths, { purpose: "serve", allowDownload: false }, "pi");
+    assert.deepEqual(calls[3].arguments.slice(0, 6), [
+      paths.npxCliPath.replaceAll("/", "\\"), "--yes", "--package", "pi-acp@0.0.33", "--", "node"
+    ]);
+    assert.equal(calls[3].environment.PATH.split(";")[0], "C:\\Program Files\\node");
+    assert.equal(calls[3].environment.PI_ACP_PI_COMMAND, paths.piPath.replaceAll("/", "\\"));
+    assert.equal(calls[3].environment.npm_config_offline, "true");
+    assert.ok(calls[3].arguments.at(-1).length < 300);
+    assert.doesNotMatch(calls[3].arguments.at(-1), /get_available_thinking_levels/u);
+    assert.match(calls[3].environment.SPT_PI_ACP_LAUNCHER_SOURCE, /get_available_thinking_levels/u);
+    assert.match(calls[3].arguments.at(-1), /delete process\.env\.SPT_PI_ACP_LAUNCHER_SOURCE/u);
+    await assert.rejects(inspectLocalRuntime({ ...paths, piPath: "C:/npm/pi.cmd" }, "pi"), { code: "PI_PATH_SCRIPT" });
+    await assert.rejects(createSubprocess({ ...paths, piPath: "C:/npm/pi.ps1" }, { purpose: "serve", allowDownload: false }, "pi"), { code: "PI_PATH_SCRIPT" });
+  }
+  finally { Object.assign(global, saved); }
+});
+
 function piProcess(version = "0.0.33") {
   const process = new FakeProcess((message, process) => {
     if (message.method === "initialize") process.respond(message.id, {
@@ -718,7 +758,9 @@ test("candidate discovery preserves Windows drive letters and finds Node plus np
     "C:\\Program Files\\nodejs\\npx-cli.js",
     "C:\\Users\\test\\AppData\\Roaming\\npm\\codex.exe",
     "D:\\nvm\\v24.14.0\\node.exe",
-    "D:\\nvm\\v24.14.0\\node_modules\\npm\\bin\\npx-cli.js"
+    "D:\\nvm\\v24.14.0\\node_modules\\npm\\bin\\npx-cli.js",
+    "C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\bundle\\cli.js",
+    "C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe"
   ]);
   const stats = [];
   global.PathUtils = windowsPathUtils();
@@ -757,6 +799,8 @@ test("candidate discovery preserves Windows drive letters and finds Node plus np
     assert.ok(candidates.npx.some(entry => entry.path === "C:\\Program Files\\nodejs\\npx-cli.js"));
     assert.ok(candidates.npx.some(entry => entry.path === "D:\\nvm\\v24.14.0\\node_modules\\npm\\bin\\npx-cli.js"));
     assert.ok(candidates.codex.some(entry => entry.path === "C:\\Users\\test\\AppData\\Roaming\\npm\\codex.exe"));
+    assert.ok(candidates.pi.some(entry => entry.path.endsWith("pi-coding-agent\\dist\\bundle\\cli.js") && entry.source === "npm"));
+    assert.ok(candidates.opencode.some(entry => entry.path.endsWith("opencode-ai\\bin\\opencode.exe") && entry.source === "npm"));
     assert.equal(stats.includes("C"), false);
     assert.equal(stats.some(value => value === "relative" || value.startsWith("relative\\")), false);
   }

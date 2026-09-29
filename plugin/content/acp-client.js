@@ -801,6 +801,11 @@
     for (const path of [...new Set(pathDirectories)].slice(0, 128)) directories.push({ path, source: "path" });
     const programFiles = toNativeAbsolutePath(environmentValue("ProgramFiles"), windows);
     const appData = toNativeAbsolutePath(environmentValue("APPDATA"), windows);
+    if (windows && appData) {
+      const npmRoot = global.PathUtils.join(appData, "npm", "node_modules");
+      await add("pi", global.PathUtils.join(npmRoot, "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js"), "npm");
+      await add("opencode", global.PathUtils.join(npmRoot, "opencode-ai", "bin", "opencode.exe"), "npm");
+    }
     const standardDirectories = windows ? [
       toNativeAbsolutePath(environmentValue("NVM_SYMLINK"), windows),
       programFiles && global.PathUtils.join(programFiles, "nodejs"),
@@ -883,6 +888,9 @@
     const provider = Agents.getProvider(agentId);
     paths = normalizeRuntimePaths(paths);
     validateRuntimePaths(paths);
+    if (agentId === "pi") validatePiPath(paths.piPath, usesWindowsPaths(paths));
+    const windowsPi = agentId === "pi" && usesWindowsPaths(paths);
+    const piLauncher = agentId === "pi" ? PiCompat.createLauncherSource() : "";
     const { Subprocess } = global.ChromeUtils.importESModule(
       "resource://gre/modules/Subprocess.sys.mjs"
     );
@@ -891,14 +899,24 @@
       "--yes",
       "--package",
       provider.packageSpec,
-      ...(agentId === "pi" ? ["--", paths.nodePath, "--input-type=commonjs", "--eval", PiCompat.createLauncherSource()] : [provider.command])
+      // Windows npm exec uses cmd.exe: an absolute Node path with spaces gets
+      // split, and the serialized launcher exceeds cmd's command-line limit.
+      // Use the selected Node from PATH and pass trusted source in this one
+      // process's environment; remove it before the adapter starts Pi.
+      ...(agentId === "pi" ? ["--", windowsPi ? "node" : paths.nodePath,
+        "--input-type=commonjs", "--eval", windowsPi
+          ? 'const s=process.env.SPT_PI_ACP_LAUNCHER_SOURCE;if(!s)throw Error("SPT_PI_COMPAT_SOURCE");delete process.env.SPT_PI_ACP_LAUNCHER_SOURCE;eval(s)'
+          : piLauncher] : [provider.command])
     ];
     if (purpose === "version") argumentsList.push("--version");
     return Subprocess.call({
       command: paths.nodePath,
       arguments: argumentsList,
       environmentAppend: true,
-      environment: createEnvironment(paths, { allowDownload }, agentId),
+      environment: {
+        ...createEnvironment(paths, { allowDownload }, agentId),
+        ...(windowsPi ? { SPT_PI_ACP_LAUNCHER_SOURCE: piLauncher } : {})
+      },
       stderr: "pipe"
     });
   }
@@ -940,6 +958,15 @@
     return collectSubprocess(process);
   }
 
+  function validatePiPath(path, windows) {
+    if (windows && /\.(?:cmd|bat|ps1)$/iu.test(path)) {
+      throw new ACPError("PI_PATH_SCRIPT", "Windows 请选 Pi 安装包的 dist\\bundle\\cli.js 或原生 pi.exe，不要选择 .cmd/.bat/.ps1 包装文件");
+    }
+    if (windows && !/\.(?:js|exe)$/iu.test(path)) {
+      throw new ACPError("PI_PATH_SCRIPT", "Windows Pi 路径必须是 cli.js 或原生 pi.exe");
+    }
+  }
+
   async function validateExistingPaths(paths) {
     validateRuntimePaths(paths);
     for (const path of Object.values(paths)) {
@@ -973,11 +1000,14 @@
   async function inspectLocalRuntime(paths, agentId = "codex") {
     const provider = Agents.getProvider(agentId);
     paths = normalizeRuntimePaths(paths);
+    if (agentId === "pi") validatePiPath(paths.piPath, usesWindowsPaths(paths));
     await validateExistingPaths(paths);
+    const piIsWindowsScript = agentId === "pi" && usesWindowsPaths(paths) && /\.js$/iu.test(paths.piPath);
     const [node, npx, codex, login] = await Promise.all([
       runLocalCommand(paths.nodePath, ["--version"], paths, agentId),
       runLocalCommand(paths.nodePath, [paths.npxCliPath, "--version"], paths, agentId),
-      runLocalCommand(paths[`${provider.id}Path`], ["--version"], paths, agentId),
+      runLocalCommand(piIsWindowsScript ? paths.nodePath : paths[`${provider.id}Path`],
+        piIsWindowsScript ? [paths.piPath, "--version"] : ["--version"], paths, agentId),
       agentId === "codex" ? runLocalCommand(paths.codexPath, ["login", "status"], paths) : Promise.resolve({ exitCode: 0, stdout: "Pi: configure providers using the local pi CLI" })
     ]);
     const version = (result) => `${result.stdout}\n${result.stderr}`

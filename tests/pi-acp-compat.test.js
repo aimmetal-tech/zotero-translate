@@ -21,11 +21,20 @@ const boundaryFixture = `class Proc {
 function isThinkingLevel(x) { return x === "high"; }
 async function getThinkingState(proc, pre) { throw new Error("old state"); }
 async function getSessionConfiguration(proc, pre) {}
+function terminal(cmd) { return { shell: shouldUseShellForPiCommand(cmd) }; }
+function makeChild(cmd, args) {
+  const child = spawn(cmd, args, {
+    shell: shouldUseShellForPiCommand(cmd)
+  });
+  return child;
+}
 `;
 
 function thinkingFixture() {
-  const context = vm.createContext({});
-  vm.runInContext(Compat.patchAdapterSource(boundaryFixture) + "globalThis.api = { Proc, getThinkingState };", context);
+  const context = vm.createContext({ process: { platform: "win32", execPath: "C:\\node\\node.exe" },
+    spawn: (command, args, options) => ({ command, args, options }),
+    shouldUseShellForPiCommand: () => true });
+  vm.runInContext(Compat.patchAdapterSource(boundaryFixture) + "globalThis.api = { Proc, getThinkingState, makeChild };", context);
   const proc = new context.api.Proc();
   proc.calls = [];
   proc.levels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -37,8 +46,17 @@ function thinkingFixture() {
     throw new Error(`Unexpected RPC: ${command.type}`);
   };
   proc.getState = async () => ({ thinkingLevel: proc.level });
-  return { proc, getState: () => context.api.getThinkingState(proc) };
+  return { proc, getState: () => context.api.getThinkingState(proc), makeChild: context.api.makeChild };
 }
+
+test("Windows Pi script uses the selected Node without a shell", () => {
+  const { makeChild } = thinkingFixture();
+  const child = makeChild("C:\\Program Files\\Pi\\cli.js", ["--mode", "rpc"]);
+  assert.equal(child.command, "C:\\node\\node.exe");
+  assert.deepEqual(Array.from(child.args), ["C:\\Program Files\\Pi\\cli.js", "--mode", "rpc"]);
+  assert.equal(child.options.shell, false);
+  assert.match(Compat.patchAdapterSource(boundaryFixture), /function terminal\(cmd\) \{ return \{ shell: shouldUseShellForPiCommand\(cmd\) \}; \}/u);
+});
 
 test("Pi thinking options preserve max and follow current model capabilities", async () => {
   const { proc, getState } = thinkingFixture();

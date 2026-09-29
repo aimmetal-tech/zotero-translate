@@ -21,4 +21,8 @@ XPI_PATH="dist/smart-paper-translator-${VERSION}.xpi"
 test -f "$XPI_PATH"
 unzip -t "$XPI_PATH"
 unzip -Z1 "$XPI_PATH"
-shasum -a 256 "$XPI_PATH" > dist/SHA256SUMS
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 "$XPI_PATH" > dist/SHA256SUMS
+else
+  sha256sum "$XPI_PATH" > dist/SHA256SUMS
+fi
