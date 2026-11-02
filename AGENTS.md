@@ -102,6 +102,8 @@ zotero-translate/
 ├── package.json                      # Node 测试和静态检查入口
 ├── .gitattributes                    # 固定 D3 bundle 的 LF 换行与跨平台字节一致性
 ├── .gitignore
+├── .github/
+│   └── workflows/windows-ci.yml     # origin 专用分支 push 验证，Windows JS/Python/归档独立任务和失败日志
 ├── .thinkrail/context/mockups/       # 本地忽略的工具栏/全文进度/逐页/片段JSON/导出及图片重新生成示意，不随 XPI 分发
 ├── .agents/
 │   └── skills/
@@ -230,6 +232,7 @@ zotero-translate/
 │   ├── item-tree-ui.test.js          # 标签编辑/聚合/分页/定位、手动优先、失败重试、异步隔离与清理
 │   └── reader-ui.test.js             # 选区/截图 Agents 入口、划线翻译/禁用、术语删除/重试、Tabs、拖拽缩放和陈旧 UI 防护
 ├── scripts/
+│   ├── windows_ci.py                # 原生子进程检查入口、完整失败退出码/日志、JUnit 与候选 XPI 可复现检查
 │   ├── build.sh                      # 完整 XPI 构建与归档检查入口
 │   ├── build_xpi.py                  # 无依赖、可复现的 XPI 打包器
 │   └── validate_static.py            # 清单、XHTML 和安全边界检查
@@ -319,6 +322,12 @@ zotero-translate/
 完成任务前，应将实际目录与“当前项目结构”重新核对；如果不一致，任务不能视为完成。
 
 ## 常用验证命令
+
+Windows CI 仅在 `aimmetal-tech/zotero-translate` 的 `feat/windows-test-ci` 分支 push 时触发，使用 Windows runner、Node 22、Python 3.13；工作流仅只读仓库并上传 7 天有效的 Actions artifacts，不创建 PR、tag 或 release，不修改上游。三个矩阵任务 `javascript`、`python`、`package` 独立运行并保留真实失败状态；不使用 continue-on-error，不因其他套件失败而取消任务。测试依赖仅在临时 runner 安装固定 PyMuPDF 1.28.2 / requests 2.32.5，本地入口不安装依赖、不请求真实 OXR/模型、不操控 Zotero。此分支以 main 为基线，不隐式合入 `fix/windows-fulltext-worker` 的代码。
+
+本地使用已有解释器分别执行 `python -B scripts/windows_ci.py javascript`、`python -B scripts/windows_ci.py python`、`python -B scripts/windows_ci.py package`；JS 任务需要 PATH 中已有 Node。日志、JUnit 和环境版本在 `dist/windows-ci/reports/`，候选包和 SHA256SUMS 在 `dist/windows-ci/packages/`，均不提交。Python 入口强制完整 PDF 测试，忽略进度专用模式；失败保留日志并返回非零。归档任务执行静态校验、两次构建哈希比较和 ZIP CRC/入口/完整运行时清单检查。这里的通过仅代表测试和归档结果，不代表 Zotero 桌面兼容性。
+
+当前 main 的本地 Windows 基线已出现全文 worker/POSIX 测试假设失败；CI 配置交付验证需区分入口/工作流校验通过与既有测试失败，不为获取绿灯跳过或修改现有失败测试。原有 dist 顶层 XPI 和插件版本保持不变。
 
 ```bash
 npm run check

@@ -1,0 +1,56 @@
+name: Windows CI (fork validation)
+
+on:
+  push:
+    branches: [feat/windows-test-ci]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows / ${{ matrix.suite }}
+    if: github.repository == 'aimmetal-tech/zotero-translate'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [javascript, python, package]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      SPT_TEST_FULLTEXT_PROGRESS_ONLY: '0'
+      NODE_DISABLE_COMPILE_CACHE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install isolated CI test dependencies
+        if: matrix.suite == 'python'
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: PyMuPDF==1.28.2 requests==2.32.5
+      - name: Run Windows checks
+        run: python -B scripts/windows_ci.py ${{ matrix.suite }}
+      - name: Upload logs and candidate artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-${{ matrix.suite }}-${{ github.run_attempt }}
+          path: dist/windows-ci/
+          retention-days: 7
+          if-no-files-found: warn

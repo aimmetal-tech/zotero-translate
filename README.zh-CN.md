@@ -157,3 +157,11 @@ unzip -t dist/smart-paper-translator-0.1.65.xpi
 构建产物输出到 `dist/`。默认交付检查为自动测试与静态归档检查；真机 Zotero 解析和 UI 测试仅在另行明确请求时执行。适配器行为、存储结构、渲染限制和历史验证结果见[配置与实现参考](docs/technical-reference.zh-CN.md)。
 
 反馈问题时，请附上插件版本、Zotero 版本、所选 Agent 和复现步骤；日志与截图中请去掉 API Key 和私人论文内容。
+
+### 在自己的 fork 验证 Windows
+
+`.github/workflows/windows-ci.yml` 仅响应 `aimmetal-tech/zotero-translate` 的 `feat/windows-test-ci` 分支 push。推送后，在自己仓库的 **Actions → Windows CI (fork validation)** 查看 JavaScript、Python 和归档三个独立任务；失败任务仍上传日志，JavaScript 另有 JUnit 报告。下载对应的 `windows-<suite>-<attempt>` artifact 查看详情。若 fork 的 Actions 尚未启用，先在该仓库 Actions 页面启用，再重新 push 一个提交以触发首次运行。
+
+这个分支从 `main` 建立，保留原始测试和插件行为。当前 Windows 已知失败会如实报红，用于验证 CI 能捕获问题；后续可在此分支应用修复并再次比较结果。工作流不创建 PR、tag 或 release，插件版本保持 0.1.65。归档任务的 XPI 只是运行附件。
+
+本地复现入口：`python -B scripts/windows_ci.py javascript`、`python -B scripts/windows_ci.py python`、`python -B scripts/windows_ci.py package`。使用已准备好的 Python/Node；完整 Python 测试需要插件 requirements.txt 中的依赖。本地入口不自动安装依赖。输出位于 `dist/windows-ci/`，不覆盖 `dist/` 顶层已有包。
