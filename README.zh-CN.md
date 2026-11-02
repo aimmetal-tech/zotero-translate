@@ -162,6 +162,6 @@ unzip -t dist/smart-paper-translator-0.1.65.xpi
 
 `.github/workflows/windows-ci.yml` 仅响应 `aimmetal-tech/zotero-translate` 的 `feat/windows-test-ci` 分支 push。推送后，在自己仓库的 **Actions → Windows CI (fork validation)** 查看 JavaScript、Python 和归档三个独立任务；失败任务仍上传日志，JavaScript 另有 JUnit 报告。下载对应的 `windows-<suite>-<attempt>` artifact 查看详情。若 fork 的 Actions 尚未启用，先在该仓库 Actions 页面启用，再重新 push 一个提交以触发首次运行。
 
-这个分支从 `main` 建立，保留原始测试和插件行为。当前 Windows 已知失败会如实报红，用于验证 CI 能捕获问题；后续可在此分支应用修复并再次比较结果。工作流不创建 PR、tag 或 release，插件版本保持 0.1.65。归档任务的 XPI 只是运行附件。
+这个分支从 `main` 建立，首次云端运行已捕获预览保存、测试平台假设和 Mermaid 字节哈希问题。后续修正预览/版面 PDF 的 Windows 文件同步、缓存元数据校验、跨平台管道/信号和 CRLF 测试，并固定 vendor JavaScript 的 LF 换行；保留完整哈希校验，新增真实 Git 检出回归。仅依赖原生 POSIX shell 的进程测试在 Windows 明确跳过。工作流不创建 PR、tag 或 release，插件版本保持 0.1.65。归档任务的 XPI 只是运行附件。
 
 本地复现入口：`python -B scripts/windows_ci.py javascript`、`python -B scripts/windows_ci.py python`、`python -B scripts/windows_ci.py package`。使用已准备好的 Python/Node；完整 Python 测试需要插件 requirements.txt 中的依赖。本地入口不自动安装依赖。输出位于 `dist/windows-ci/`，不覆盖 `dist/` 顶层已有包。

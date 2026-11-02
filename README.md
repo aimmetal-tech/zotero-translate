@@ -145,6 +145,8 @@ Regular chat histories, PDF copies, and screenshots are stored in separate `code
 
 ## Development
 
+The fork branch `feat/windows-test-ci` runs independent Windows JavaScript, Python and package checks in `aimmetal-tech/zotero-translate`. Failure logs are retained as Actions artifacts. Its Windows fixes cover writable file synchronization, complete cache metadata, portable test assumptions and vendor LF preservation, including a real Git checkout regression. The plugin remains at 0.1.65; the workflow does not publish releases. See the [Chinese Windows CI instructions](README.zh-CN.md#在自己的-fork-验证-windows) for reports and local commands.
+
 Read [AGENTS.md](AGENTS.md) before changing plugin code. Runtime files live in `plugin/`; tests and build tools stay outside the XPI. Development checks require Node.js 22, Python 3, and Info-ZIP.
 
 ```bash

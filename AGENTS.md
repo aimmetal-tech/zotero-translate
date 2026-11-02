@@ -100,7 +100,7 @@ zotero-translate/
 ├── README.md                         # 英文主介绍：Agents/全文翻译、安装配置、测试包边界与数据说明
 ├── README.zh-CN.md                   # 中文介绍，与英文主版对应
 ├── package.json                      # Node 测试和静态检查入口
-├── .gitattributes                    # 固定 D3 bundle 的 LF 换行与跨平台字节一致性
+├── .gitattributes                    # 固定 vendor JavaScript（D3/KaTeX/Mermaid）的 LF 字节与跨平台哈希
 ├── .gitignore
 ├── .github/
 │   └── workflows/windows-ci.yml     # origin 专用分支 push 验证，Windows JS/Python/归档独立任务和失败日志
@@ -159,8 +159,8 @@ zotero-translate/
 │       ├── fulltext.css              # 左PDF/右Markdown、进度/并发、重译/JSON修正、图片/时间轴及独立导出结果
 │       ├── fulltext-python/          # 随XPI打包的固定脚本，不打包Python解释器或第三方库
 │       │   ├── worker.py             # 隔离入口，check/convert/preview有界JSON协议
-│       │   ├── pdf_to_markdown.py    # 分块/进度JSONL、OXR缓存、逐页识别块重建/哈希记录、安全HTTP与逐页图片
-│       │   ├── layout_pdf.py         # 原PDF的无损版面分析叠加副本
+│       │   ├── pdf_to_markdown.py    # 分块/进度JSONL、跨平台原子输出/缓存元数据、逐页识别块/哈希、安全HTTP与逐页图片
+│       │   ├── layout_pdf.py         # 原PDF的无损版面分析叠加副本、可写描述符同步/原子保存
 │       │   └── requirements.txt      # 手动准备PyMuPDF/requests的版本范围
 │       ├── pi-acp-compat.js          # 固定 Pi 适配器哈希校验、Node 内存补丁、按模型读取档位与确认 max
 │       ├── opencode-acp.js          # 原生启动、OSC/模型收集、检测与分支临时数据库/能力解析
@@ -201,6 +201,7 @@ zotero-translate/
 │       ├── preferences.js            # 设置页路径发现、全文本地依赖检测、Tab/思考默认项与迟到隔离
 │       └── preferences.css           # 设置页路径组合控件、分段 Tab、窄布局与诊断样式
 ├── tests/
+│   ├── distribution.test.js          # 真实 Git autocrlf 检出后 D3/KaTeX/Mermaid 字节保持回归
 │   ├── helpers.js                    # Zotero、缓存/偏好 mock 与 Gecko Windows 原生路径契约
 │   ├── logic.test.js                 # 模板、术语、URL、签名和论文标识
 │   ├── credentials.test.js           # API Key 隔离测试
@@ -228,7 +229,7 @@ zotero-translate/
 │   ├── fulltext-image-network.test.js # 公网IP/DNS与代理Fake-IP、图片缓存链、Gecko通道/重定向/匿名/流限额及迟到
 │   ├── fulltext-runtime.test.js      # JSONL/真实渲染图片/缓存补齐/取消、内容/CSP/宿主/身份/清理及导出
 │   ├── fulltext-ui.test.js           # 进度/并发/重译/JSON、编辑/图片/关闭、重新生成确认/陈旧拒绝及导出反馈
-│   ├── fulltext_worker_test.py       # Python离线PDF/HTTP及无第三方依赖的进度/逐页重建/缓存/哈希/路径测试
+│   ├── fulltext_worker_test.py       # Python离线PDF/HTTP、Windows保存/缓存、跨平台管道/信号、逐页/哈希/路径回归
 │   ├── item-tree-ui.test.js          # 标签编辑/聚合/分页/定位、手动优先、失败重试、异步隔离与清理
 │   └── reader-ui.test.js             # 选区/截图 Agents 入口、划线翻译/禁用、术语删除/重试、Tabs、拖拽缩放和陈旧 UI 防护
 ├── scripts/
@@ -323,11 +324,11 @@ zotero-translate/
 
 ## 常用验证命令
 
-Windows CI 仅在 `aimmetal-tech/zotero-translate` 的 `feat/windows-test-ci` 分支 push 时触发，使用 Windows runner、Node 22、Python 3.13；工作流仅只读仓库并上传 7 天有效的 Actions artifacts，不创建 PR、tag 或 release，不修改上游。三个矩阵任务 `javascript`、`python`、`package` 独立运行并保留真实失败状态；不使用 continue-on-error，不因其他套件失败而取消任务。测试依赖仅在临时 runner 安装固定 PyMuPDF 1.28.2 / requests 2.32.5，本地入口不安装依赖、不请求真实 OXR/模型、不操控 Zotero。此分支以 main 为基线，不隐式合入 `fix/windows-fulltext-worker` 的代码。
+Windows CI 仅在 `aimmetal-tech/zotero-translate` 的 `feat/windows-test-ci` 分支 push 时触发，使用 Windows runner、Node 22、Python 3.13；工作流仅只读仓库并上传 7 天有效的 Actions artifacts，不创建 PR、tag 或 release，不修改上游。三个矩阵任务 `javascript`、`python`、`package` 独立运行并保留真实失败状态；不使用 continue-on-error，不因其他套件失败而取消任务。测试依赖仅在临时 runner 安装固定 PyMuPDF 1.28.2 / requests 2.32.5，本地入口不安装依赖、不请求真实 OXR/模型、不操控 Zotero。此分支从 main 建立，先记录失败基线，再按用户要求应用 Windows 回归修复。
 
 本地使用已有解释器分别执行 `python -B scripts/windows_ci.py javascript`、`python -B scripts/windows_ci.py python`、`python -B scripts/windows_ci.py package`；JS 任务需要 PATH 中已有 Node。日志、JUnit 和环境版本在 `dist/windows-ci/reports/`，候选包和 SHA256SUMS 在 `dist/windows-ci/packages/`，均不提交。Python 入口强制完整 PDF 测试，忽略进度专用模式；失败保留日志并返回非零。归档任务执行静态校验、两次构建哈希比较和 ZIP CRC/入口/完整运行时清单检查。这里的通过仅代表测试和归档结果，不代表 Zotero 桌面兼容性。
 
-当前 main 的本地 Windows 基线已出现全文 worker/POSIX 测试假设失败；CI 配置交付验证需区分入口/工作流校验通过与既有测试失败，不为获取绿灯跳过或修改现有失败测试。原有 dist 顶层 XPI 和插件版本保持不变。
+首次云端运行 41425065881 暴露全文 worker、POSIX 测试假设及 Mermaid checkout 换行导致的哈希失败。修正采用可写非截断描述符 fsync、完整缓存链接元数据、跨平台管道/信号和 CRLF 断言；仅原生 /bin/sh + /bin/sleep OpenCode 进程测试在 Windows 明确跳过。vendor JS 统一 LF，保留固定哈希并增加真实 Git 检出回归。修正后本地 Windows 完整 Python 70 项通过；JavaScript 871 项通过、1 项 POSIX 专用测试跳过，静态和可复现 60 文件 XPI 检查通过。云端结果以当前提交的 Actions 记录为准。原有 dist 顶层 XPI、插件 0.1.65 版本和上游 release 保持不变。
 
 ```bash
 npm run check

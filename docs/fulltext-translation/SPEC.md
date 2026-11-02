@@ -42,6 +42,10 @@ Reader 入口从 tabID 精确复核附件，仅支持主窗口 PDF 标签页。�
 
 ## Markdown contract
 
+Windows 本地原子输出需使用不截断的 `r+b` 描述符执行 fsync，再替换目标；此规则同时适用于预览 PNG、Markdown/缓存/逐页记录及版面 PDF。渲染器可能关闭并替换初始临时文件，故仍需重新打开最终临时文件进行同步。保留失败回滚和临时文件清理，不能通过跳过 fsync 获取成功。缓存扫描使用 `os.stat(entry.path, follow_symlinks=False)` 读取完整硬链接数，避免 Windows DirEntry.stat 的 st_nlink=0 误判；常规文件、单硬链接及资源上限规则不变。
+
+Windows 进度 flush 测试使用有界线程读取管道；信号处理器测试使用 signal.raise_signal，不把 os.kill(SIGTERM) 的强制结束视为处理器执行。0.1.65 本地修复后完整离线 Python 70 项通过，无跳过；未请求真实 OXR/模型、上传论文、操控 Zotero 或验证原生中文 PDF/附件导入。
+
 所有分段拼接必须逐字还原输入，不能简单以空行拆断代码、公式或 HTML 表格。References / Bibliography / 参考文献标题下的条目整体保持原文；用户在确认前检查识别数量，缺少可识别标题时先修正。正文及引用块可以翻译，文内 `[1]` 等标记不变。
 
 采用统一的正文片段协议，不保留旧长标记请求/响应适配器。每段词法分解为本地保护骨架与连续 ID（t0、t1…）正文片段。请求 source 只含 {id,text}，context 按原顺序只含正文 ID 或保护类别；不得包含保护原值。响应严格为 {translations:[{id,text}]}，翻译和校对使用相同格式，每段的全部片段一起请求，不按片段增加请求次数。系统指令提供完整示例；重试只追加固定格式反馈，不将供应商原始错误或本地资源反射到请求中。

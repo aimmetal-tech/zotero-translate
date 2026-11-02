@@ -1,2 +1,2 @@
-# Preserve the pinned D3 bundle's exact bytes across platform checkouts.
-/plugin/content/vendor/d3/d3.min.js text eol=lf
+# Preserve all bundled JavaScript runtimes' pinned bytes across checkouts.
+/plugin/content/vendor/**/*.js text eol=lf
